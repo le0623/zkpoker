@@ -2,6 +2,7 @@ type UserNumber = nat64;
 type AccountNumber = nat64;
 type PublicKey = blob;
 type CredentialId = blob;
+type Aaguid = blob;
 type DeviceKey = PublicKey;
 type UserKey = PublicKey;
 type SessionKey = PublicKey;
@@ -73,6 +74,7 @@ type DeviceData = record {
     pubkey : DeviceKey;
     alias : text;
     credential_id : opt CredentialId;
+    aaguid : opt Aaguid;
     purpose : Purpose;
     key_type : KeyType;
     protection : DeviceProtection;
@@ -92,6 +94,7 @@ type DeviceWithUsage = record {
     pubkey : DeviceKey;
     alias : text;
     credential_id : opt CredentialId;
+    aaguid : opt Aaguid;
     purpose : Purpose;
     key_type : KeyType;
     protection : DeviceProtection;
@@ -247,7 +250,7 @@ type CaptchaConfig = record {
 // Each field is wrapped is `opt` to indicate whether the field should
 // keep the previous value or update to a new value (e.g. `null` keeps the previous value).
 //
-// Some fields, like `openid_google`, have an additional nested `opt`, this indicates
+// Some fields, like `analytics_config`, have an additional nested `opt`, this indicates
 // enable/disable status (e.g. `opt null` disables a feature while `null` leaves it untouched).
 type InternetIdentityInit = record {
     // Set lowest and highest anchor
@@ -274,8 +277,8 @@ type InternetIdentityInit = record {
     // Configuration for New Origin Flows.
     // If present, list of origins using the new authentication flow.
     new_flow_origins : opt vec text;
-    // Configuration for OpenID Google client
-    openid_google : opt opt OpenIdConfig;
+    // Configurations for OpenID clients
+    openid_configs : opt vec OpenIdConfig;
     // Configuration for Web Analytics
     analytics_config : opt opt AnalyticsConfig;
     // Configuration to fetch root key or not from frontend assets
@@ -299,10 +302,12 @@ type CaptchaResult = ChallengeResult;
 
 // Extra information about registration status for new devices
 type DeviceRegistrationInfo = record {
-    // If present, the user has tentatively added a new device. This
-    // new device needs to be verified (see relevant endpoint) before
-    // 'expiration'.
+    // If present, the user has registered a new authentication method. This new authentication
+    // method needs to be confirmed before 'expiration' in order to be added to the identity.
     tentative_device : opt DeviceData;
+    // If present, the user has registered a new session. This new session needs to be confirmed before
+    // 'expiration' in order for it be authorized to register an authentication method to the identity.
+    tentative_session : opt principal;
     // The timestamp at which the anchor will turn off registration mode
     // (and the tentative device will be forgotten, if any, and if not verified)
     expiration : Timestamp;
@@ -318,6 +323,8 @@ type IdentityAnchorInfo = record {
     openid_credentials : opt vec OpenIdCredential;
     // The name of the Internet Identity
     name : opt text;
+    // The timestamp at which the anchor was created
+    created_at : opt Timestamp;
 };
 
 type AnchorCredentials = record {
@@ -357,7 +364,14 @@ type JWT = text;
 type Salt = blob;
 
 type OpenIdConfig = record {
+    name : text;
+    logo : text;
+    issuer : text;
     client_id : text;
+    jwks_uri : text;
+    auth_uri : text;
+    auth_scope : vec text;
+    fedcm_uri : opt text;
 };
 
 type OpenIdCredentialKey = record { Iss; Sub };
@@ -384,6 +398,7 @@ type OpenIdCredentialAddError = variant {
     JwtVerificationFailed;
     OpenIdCredentialAlreadyRegistered;
     InternalCanisterError : text;
+    JwtExpired;
 };
 
 type OpenIdCredentialRemoveError = variant {
@@ -396,6 +411,7 @@ type OpenIdDelegationError = variant {
     NoSuchAnchor;
     JwtVerificationFailed;
     NoSuchDelegation;
+    JwtExpired;
 };
 
 type OpenIdPrepareDelegationResponse = record {
@@ -423,6 +439,9 @@ type MetadataMapV2 = vec record {
 type WebAuthn = record {
     credential_id : CredentialId;
     pubkey : PublicKey;
+
+    // Authenticator Attestation Global Unique Identifier (AAGUID)
+    aaguid : opt Aaguid;
 };
 
 // Authentication method using generic signatures
@@ -473,14 +492,18 @@ type AuthnMethodData = record {
 type OpenIDRegFinishArg = record {
     jwt : JWT;
     salt : Salt;
+    name : text;
 };
 
 // Extra information about registration status for new authentication methods
 type AuthnMethodRegistrationInfo = record {
-    // If present, the user has registered a new authentication method. This
-    // new authentication needs to be verified before 'expiration' in order to
-    // be added to the identity.
+
+    // If present, the user has registered a new authentication method. This new authentication
+    // method needs to be confirmed before 'expiration' in order to be added to the identity.
     authn_method : opt AuthnMethodData;
+    // If present, the user has registered a new session. This new session needs to be confirmed before
+    // 'expiration' in order for it be authorized to register an authentication method to the identity.
+    session : opt principal;
     // The timestamp at which the identity will turn off registration mode
     // (and the authentication method will be forgotten, if any, and if not verified)
     expiration : Timestamp;
@@ -490,6 +513,13 @@ type AuthnMethodConfirmationCode = record {
     confirmation_code : text;
     expiration : Timestamp;
 };
+
+type AuthnMethodSessionInfo = record {
+    name : opt text;
+    created_at : opt Timestamp;
+};
+
+type RegistrationId = text;
 
 type AuthnMethodRegisterError = variant {
     // Authentication method registration mode is off, either due to timeout or because it was never enabled.
@@ -501,6 +531,8 @@ type AuthnMethodRegisterError = variant {
 };
 
 type AuthnMethodConfirmationError = variant {
+    Unauthorized : principal;
+    InternalCanisterError : text;
     // Wrong confirmation code entered. Retry with correct code.
     WrongCode : record {
         retries_left : nat8;
@@ -509,6 +541,24 @@ type AuthnMethodConfirmationError = variant {
     RegistrationModeOff;
     // There is no registered authentication method to be confirmed.
     NoAuthnMethodToConfirm;
+};
+
+type AuthnMethodRegistrationModeEnterError = variant { 
+    InvalidRegistrationId : text;
+    Unauthorized : principal;
+    AlreadyInProgress;
+    InternalCanisterError : text;
+};
+
+type AuthnMethodRegistrationModeExitError = variant {
+    Unauthorized : principal;
+    InternalCanisterError : text;
+    RegistrationModeOff;
+    InvalidMetadata : text;
+};
+
+type LookupByRegistrationIdError = variant {
+    InvalidRegistrationId : text;
 };
 
 type IdentityAuthnInfo = record {
@@ -523,6 +573,8 @@ type IdentityInfo = record {
     // Authentication method independent metadata
     metadata : MetadataMapV2;
     name : opt text;
+    // The timestamp at which the anchor was created
+    created_at : opt Timestamp;
 };
 
 type IdentityInfoError = variant {
@@ -583,6 +635,28 @@ type AccountDelegationError = variant {
     InternalCanisterError : text;
     Unauthorized : principal;
     NoSuchDelegation;
+};
+
+type GetDefaultAccountError = variant {
+    InternalCanisterError : text;
+    Unauthorized : principal;
+    NoSuchAnchor;
+    NoSuchOrigin : record {
+        anchor_number : UserNumber;
+    };
+};
+
+type SetDefaultAccountError = variant {
+    InternalCanisterError : text;
+    Unauthorized : principal;
+    NoSuchAnchor;
+    NoSuchOrigin : record {
+        anchor_number : UserNumber;
+    };
+    NoSuchAccount : record {
+        anchor_number : UserNumber;
+        origin : FrontendHostname;
+    };
 };
 
 type PrepareAccountDelegation = record {
@@ -704,8 +778,6 @@ type IdRegFinishResult = record {
 };
 
 type IdRegFinishError = variant {
-    // The configured maximum number of identities has been reached.
-    IdentityLimitReached;
     // This call is unexpected, see next_step.
     UnexpectedCall : record {
         next_step : RegistrationFlowNextStep;
@@ -837,21 +909,30 @@ service : (opt InternetIdentityInit) -> {
     // confirmed before it can be used for authentication on this identity.
     // The registration mode is automatically exited after the returned expiration timestamp.
     // Requires authentication.
-    authn_method_registration_mode_enter : (IdentityNumber) -> (variant { Ok : record { expiration : Timestamp }; Err });
+    authn_method_registration_mode_enter : (IdentityNumber, opt RegistrationId) -> (variant { Ok : record { expiration : Timestamp }; Err : AuthnMethodRegistrationModeEnterError });
 
     // Exits the authentication method registration mode for the identity.
     // Requires authentication.
-    authn_method_registration_mode_exit : (IdentityNumber) -> (variant { Ok; Err });
+    authn_method_registration_mode_exit : (IdentityNumber, opt AuthnMethodData) -> (variant { Ok; Err : AuthnMethodRegistrationModeExitError });
 
     // Registers a new authentication method to the identity.
     // This authentication method needs to be confirmed before it can be used for authentication on this identity.
     authn_method_register : (IdentityNumber, AuthnMethodData) -> (variant { Ok : AuthnMethodConfirmationCode; Err : AuthnMethodRegisterError });
+
+    // Registers a new session for the identity.
+    // This session needs to be confirmed before it can be used to register an authentication method on this identity.
+    authn_method_session_register : (IdentityNumber) -> (variant { Ok : AuthnMethodConfirmationCode; Err : AuthnMethodRegisterError });
+
+    // Returns session info when session is confirmed and caller matches session.
+    authn_method_session_info : (IdentityNumber) -> (opt AuthnMethodSessionInfo) query;
 
     // Confirms a previously registered authentication method.
     // On successful confirmation, the authentication method is permanently added to the identity and can
     // subsequently be used for authentication for that identity.
     // Requires authentication.
     authn_method_confirm : (IdentityNumber, confirmation_code : text) -> (variant { Ok; Err : AuthnMethodConfirmationError });
+
+    lookup_by_registration_mode_id : (RegistrationId) -> (opt IdentityNumber) query;
 
     // Authentication protocol
     // =======================
@@ -875,7 +956,6 @@ service : (opt InternetIdentityInit) -> {
     // HTTP Gateway protocol
     // =====================
     http_request : (request : HttpRequest) -> (HttpResponse) query;
-    http_request_update : (request : HttpRequest) -> (HttpResponse);
 
     // Internal Methods
     // ================
@@ -927,4 +1007,18 @@ service : (opt InternetIdentityInit) -> {
         session_key : SessionKey,
         expiration : Timestamp
     ) -> (variant { Ok : SignedDelegation; Err : AccountDelegationError }) query;
+
+    get_default_account : (
+        anchor_number : UserNumber,
+        origin : FrontendHostname,
+    ) -> (variant { Ok : AccountInfo; Err: GetDefaultAccountError }) query;
+
+    set_default_account : (
+        anchor_number : UserNumber,
+        origin : FrontendHostname,
+        account_number : opt AccountNumber
+    ) -> (variant { Ok : AccountInfo; Err: SetDefaultAccountError });
+
+    // Looks up identity number when called with a recovery phrase
+    lookup_caller_identity_by_recovery_phrase : () -> (opt IdentityNumber) query;
 };

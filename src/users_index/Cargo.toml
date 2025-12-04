@@ -23,7 +23,7 @@ thiserror = "1.0.57"
 
 authentication = { path = "../../libraries/authentication" }
 canister_functions = { path = "../../libraries/canister_functions" }
-currency = { git = "https://github.com/zk-game-dao/currency.git", branch = "main" }
+currency = { git = "https://github.com/trustedpoker/currency.git", branch = "main" }
 errors = { path = "../../libraries/errors" }
 user = { path = "../../libraries/user" }
 intercanister_call_wrappers = { path = "../../libraries/intercanister_call_wrappers" }

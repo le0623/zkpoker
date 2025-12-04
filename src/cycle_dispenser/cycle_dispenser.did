@@ -1,0 +1,20 @@
+type CanisterManagementError = variant {
+  CreateCanisterError : text;
+  LockError;
+  InsufficientCycles;
+  ManagementCanisterError : text;
+  LedgerError : text;
+  StopCanisterError : text;
+  Transfer : text;
+  QueryError : text;
+  UploadChunkError : text;
+  CanisterCallError : text;
+  DeleteCanisterError : text;
+  InstallCodeError : text;
+};
+type Result = variant { Ok : text; Err : CanisterManagementError };
+type Result_1 = variant { Ok; Err : CanisterManagementError };
+service : () -> {
+  get_canister_status_formatted : () -> (Result);
+  request_cycles : () -> (Result_1);
+}

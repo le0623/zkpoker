@@ -1,29 +1,20 @@
 {
   "app_frontend": {
-    "ic": "z5wv2-oiaaa-aaaam-qbeyq-cai"
+    "ic": "j7fyr-bqaaa-aaaai-atsja-cai"
   },
   "btc_frontend": {
-    "ic": "j5kch-7yaaa-aaaam-qds2a-cai"
+    "ic": "jye6f-miaaa-aaaai-atsjq-cai"
   },
   "clans_index": {
-    "ic": "xh2e2-uiaaa-aaaam-qdxiq-cai"
+    "ic": "jndpi-naaaa-aaaai-atska-cai"
   },
   "cycle_dispenser": {
-    "ic": "zuv6g-yaaaa-aaaam-qbeza-cai"
-  },
-  "ic_siwb_provider": {
-    "ic": "j2let-saaaa-aaaam-qds2q-cai"
+    "ic": "jkcj4-ayaaa-aaaai-atskq-cai"
   },
   "log_store": {
-    "ic": "ztuys-vyaaa-aaaam-qbezq-cai"
+    "ic": "jdbca-wqaaa-aaaai-atsla-cai"
   },
   "table_index": {
-    "ic": "zbspl-ziaaa-aaaam-qbe2q-cai"
-  },
-  "tournament_index": {
-    "ic": "zocwf-5qaaa-aaaam-qdfaq-cai"
-  },
-  "users_index": {
-    "ic": "lvq5c-nyaaa-aaaam-qdswa-cai"
+    "ic": "jeaeu-3iaaa-aaaai-atslq-cai"
   }
 }

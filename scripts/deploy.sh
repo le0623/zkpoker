@@ -112,7 +112,7 @@ update_did_files() {
   cargo build --release --target wasm32-unknown-unknown --package clans_canister
   cargo build --release --target wasm32-unknown-unknown --package users_canister
   
-  for canister in "${canisters[@]}"; do
+  for canister in $canisters; do
     compile_and_extract "$canister"
   done
 }

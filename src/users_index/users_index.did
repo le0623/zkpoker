@@ -1,0 +1,148 @@
+type AdminRole = variant { SuperAdmin; Admin; Moderator };
+type BanType = variant {
+  TemporarySuspension : record {
+    banned_at : nat64;
+    banned_by : principal;
+    expires_at : nat64;
+    reason : text;
+  };
+  PermanentBan : record {
+    banned_at : nat64;
+    banned_by : principal;
+    reason : text;
+  };
+  XpBan : record {
+    banned_at : nat64;
+    banned_by : principal;
+    expires_at : nat64;
+    reason : text;
+  };
+};
+type CanisterManagementError = variant {
+  CreateCanisterError : text;
+  LockError;
+  InsufficientCycles;
+  ManagementCanisterError : text;
+  LedgerError : text;
+  StopCanisterError : text;
+  Transfer : text;
+  QueryError : text;
+  UploadChunkError : text;
+  CanisterCallError : text;
+  DeleteCanisterError : text;
+  InstallCodeError : text;
+};
+type EmojiUserAvatar = record { emoji : nat64; style : nat64 };
+type Result = variant { Ok : User; Err : UserError };
+type Result_1 = variant { Ok; Err : UserError };
+type Result_10 = variant {
+  Ok : vec record { principal; nat };
+  Err : UserError;
+};
+type Result_11 = variant { Ok : principal; Err : UserError };
+type Result_12 = variant {
+  Ok : vec record { principal; CanisterManagementError };
+  Err : UserError;
+};
+type Result_2 = variant { Ok : opt text; Err : UserError };
+type Result_3 = variant { Ok : text; Err : UserError };
+type Result_4 = variant { Ok : nat64; Err : UserError };
+type Result_5 = variant {
+  Ok : vec record { principal; nat64 };
+  Err : UserError;
+};
+type Result_6 = variant { Ok : opt nat64; Err : UserError };
+type Result_7 = variant {
+  Ok : record { principal; principal };
+  Err : UserError;
+};
+type Result_8 = variant { Ok : nat; Err : UserError };
+type Result_9 = variant { Ok : vec principal; Err : UserError };
+type User = record {
+  experience_points_pure_poker : opt nat64;
+  experience_points : opt nat64;
+  user_name : text;
+  referrer : opt principal;
+  eth_wallet_address : opt text;
+  balance : nat64;
+  referred_users : opt vec record { principal; nat64 };
+  created_at : opt nat64;
+  ban_history : opt vec BanType;
+  ban_status : opt BanType;
+  is_verified : opt bool;
+  address : opt text;
+  admin_role : opt AdminRole;
+  principal_id : principal;
+  referral_start_date : opt nat64;
+  active_tables : vec principal;
+  users_canister_id : principal;
+  volume_level : opt nat16;
+  enlarge_text : opt bool;
+  avatar : opt UserAvatar;
+};
+type UserAvatar = variant { Emoji : EmojiUserAvatar };
+type UserError = variant {
+  MinimumVerificationDateMismatch;
+  UserAlreadyExists;
+  StateNotInitialized;
+  AuthorizationError;
+  PrincipalError : text;
+  BlockQueryFailed : text;
+  LockError;
+  InvalidTransactionDetails;
+  ManagementCanisterError : CanisterManagementError;
+  LedgerError : text;
+  CanisterCallFailed : text;
+  InvalidCredentialType : text;
+  BlockNotFound;
+  DuplicateTransaction;
+  InvalidRequest : text;
+  InvalidTransactionType;
+  QueryError : text;
+  InvalidIssuer;
+  UpgradeError : text;
+  SerializationError : text;
+  UserNotFound;
+  InsufficientFunds;
+  InvalidCredentialStructure;
+};
+service : () -> {
+  create_user : (text, opt text, principal, opt UserAvatar, opt principal) -> (
+      Result,
+    );
+  delete_users_canister : (principal) -> (Result_1);
+  get_account_number : () -> (Result_2) query;
+  get_canister_status_formatted : () -> (Result_3);
+  get_ckbtc_balance : () -> (Result_4);
+  get_experience_points_leaderboard : (nat64, nat64) -> (Result_5);
+  get_experience_points_position : (principal) -> (Result_6);
+  get_leaderboard_length : () -> (Result_4) query;
+  get_number_of_registered_users : () -> (Result_4) query;
+  get_pure_poker_experience_points : (nat64, nat64) -> (Result_5);
+  get_pure_poker_position : (principal) -> (Result_6);
+  get_stable_storage_stats : () -> (text) query;
+  get_user : (principal) -> (Result);
+  get_user_by_username : (text) -> (Result_7);
+  get_user_canister_cycles : (principal) -> (Result_8) query;
+  get_user_canisters : () -> (Result_9) query;
+  get_user_canisters_cycles : () -> (Result_10) query;
+  get_users_canister_principal_by_id : (principal) -> (Result_11);
+  get_verified_experience_points_leaderboard : (nat64, nat64) -> (Result_5);
+  get_verified_experience_points_leaderboard_length : () -> (Result_4);
+  get_verified_pure_poker_experience_points : (nat64, nat64) -> (Result_5);
+  monitor_and_top_up_user_canisters : () -> (Result_1);
+  ping : () -> (text) query;
+  request_cycles : () -> (Result_1);
+  top_up_user_canister : (principal, nat) -> (Result_1);
+  update_user : (
+      principal,
+      opt text,
+      opt nat64,
+      opt text,
+      principal,
+      opt text,
+      opt UserAvatar,
+    ) -> (Result);
+  upgrade_all_user_canisters : () -> (Result_12);
+  upgrade_user_canister : (principal) -> (Result_1);
+}

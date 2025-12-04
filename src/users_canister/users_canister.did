@@ -1,0 +1,157 @@
+type AdminRole = variant { SuperAdmin; Admin; Moderator };
+type BanType = variant {
+  TemporarySuspension : record {
+    banned_at : nat64;
+    banned_by : principal;
+    expires_at : nat64;
+    reason : text;
+  };
+  PermanentBan : record {
+    banned_at : nat64;
+    banned_by : principal;
+    reason : text;
+  };
+  XpBan : record {
+    banned_at : nat64;
+    banned_by : principal;
+    expires_at : nat64;
+    reason : text;
+  };
+};
+type CanisterManagementError = variant {
+  CreateCanisterError : text;
+  LockError;
+  InsufficientCycles;
+  ManagementCanisterError : text;
+  LedgerError : text;
+  StopCanisterError : text;
+  Transfer : text;
+  QueryError : text;
+  UploadChunkError : text;
+  CanisterCallError : text;
+  DeleteCanisterError : text;
+  InstallCodeError : text;
+};
+type EmojiUserAvatar = record { emoji : nat64; style : nat64 };
+type Result = variant { Ok : User; Err : UserError };
+type Result_1 = variant { Ok; Err : UserError };
+type Result_10 = variant { Ok : opt principal; Err : UserError };
+type Result_11 = variant { Ok : opt AdminRole; Err : UserError };
+type Result_12 = variant { Ok : opt BanType; Err : UserError };
+type Result_13 = variant { Ok : float64; Err : UserError };
+type Result_14 = variant { Ok; Err : text };
+type Result_2 = variant { Ok : bool; Err : UserError };
+type Result_3 = variant { Ok : vec principal; Err : UserError };
+type Result_4 = variant { Ok : record { User; nat64 }; Err : UserError };
+type Result_5 = variant { Ok : vec principal; Err : UserError };
+type Result_6 = variant { Ok : text; Err : UserError };
+type Result_7 = variant { Ok : nat64; Err : UserError };
+type Result_8 = variant {
+  Ok : vec record { principal; nat64 };
+  Err : UserError;
+};
+type Result_9 = variant { Ok : nat8; Err : UserError };
+type User = record {
+  experience_points_pure_poker : opt nat64;
+  experience_points : opt nat64;
+  user_name : text;
+  referrer : opt principal;
+  eth_wallet_address : opt text;
+  balance : nat64;
+  referred_users : opt vec record { principal; nat64 };
+  created_at : opt nat64;
+  ban_history : opt vec BanType;
+  ban_status : opt BanType;
+  is_verified : opt bool;
+  address : opt text;
+  admin_role : opt AdminRole;
+  principal_id : principal;
+  referral_start_date : opt nat64;
+  active_tables : vec principal;
+  users_canister_id : principal;
+  volume_level : opt nat16;
+  enlarge_text : opt bool;
+  avatar : opt UserAvatar;
+};
+type UserAvatar = variant { Emoji : EmojiUserAvatar };
+type UserError = variant {
+  MinimumVerificationDateMismatch;
+  UserAlreadyExists;
+  StateNotInitialized;
+  AuthorizationError;
+  PrincipalError : text;
+  BlockQueryFailed : text;
+  LockError;
+  InvalidTransactionDetails;
+  ManagementCanisterError : CanisterManagementError;
+  LedgerError : text;
+  CanisterCallFailed : text;
+  InvalidCredentialType : text;
+  BlockNotFound;
+  DuplicateTransaction;
+  InvalidRequest : text;
+  InvalidTransactionType;
+  QueryError : text;
+  InvalidIssuer;
+  UpgradeError : text;
+  SerializationError : text;
+  UserNotFound;
+  InsufficientFunds;
+  InvalidCredentialStructure;
+};
+service : () -> {
+  add_active_table : (principal, principal) -> (Result);
+  add_experience_points : (nat64, text, principal) -> (Result);
+  add_referred_user : (principal, principal) -> (Result_1);
+  ban_user_permanently : (principal, text) -> (Result);
+  ban_user_xp_only : (principal, text, nat64) -> (Result);
+  can_user_gain_xp : (principal) -> (Result_2) query;
+  can_user_play : (principal) -> (Result_2) query;
+  clean_expired_bans : () -> (Result_3);
+  clear_experience_points : () -> (Result_1);
+  clear_pure_poker_experience_points : () -> (Result_1);
+  create_user : (
+      text,
+      opt text,
+      principal,
+      opt UserAvatar,
+      opt text,
+      opt principal,
+    ) -> (Result_4);
+  get_active_tables : (principal) -> (Result_5) query;
+  get_canister_status_formatted : () -> (Result_6);
+  get_experience_points_by_uid : (principal) -> (Result_7) query;
+  get_pure_poker_experience_points_by_uid : (principal) -> (Result_7) query;
+  get_pure_poker_user_experience_points : () -> (Result_8) query;
+  get_referral_rake_percentage : (principal) -> (Result_9);
+  get_referral_tier : (principal) -> (Result_9) query;
+  get_referred_users : (principal) -> (Result_5) query;
+  get_referrer : (principal) -> (Result_10);
+  get_user : (principal) -> (Result) query;
+  get_user_admin_role : (principal) -> (Result_11) query;
+  get_user_ban_status : (principal) -> (Result_12) query;
+  get_user_by_username : (text) -> (Result) query;
+  get_user_experience_points : () -> (Result_8) query;
+  get_user_icc : (principal) -> (Result);
+  get_user_level : (principal) -> (Result_13) query;
+  get_verified_pure_poker_user_experience_points : () -> (Result_8) query;
+  get_verified_user_experience_points : () -> (Result_8) query;
+  ping : () -> (text) query;
+  promote_user_to_admin : (principal, AdminRole) -> (Result);
+  remove_active_table : (principal, principal) -> (Result);
+  remove_admin_role : (principal) -> (Result);
+  reset_users_xp : (text) -> (Result_1);
+  suspend_user_temporarily : (principal, text, nat64) -> (Result);
+  unban_user : (principal) -> (Result);
+  update_user : (
+      principal,
+      opt text,
+      opt nat64,
+      opt text,
+      opt UserAvatar,
+      opt bool,
+      opt nat16,
+      opt text,
+    ) -> (Result);
+  verify_credential : (principal, text, text, principal) -> (Result_14);
+}

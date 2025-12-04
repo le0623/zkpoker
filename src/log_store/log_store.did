@@ -1,0 +1,72 @@
+type ActionLog = record {
+  user_principal : opt principal;
+  action_type : ActionType;
+  timestamp : nat64;
+};
+type ActionType = variant {
+  Bet : record { amount : nat64 };
+  Win : record { amount : nat64 };
+  Leave;
+  Stage : record { stage : DealStage };
+  Call;
+  Fold;
+  Join;
+  BigBlind;
+  PlayersHandsRankedMainPot : record {
+    hands : vec record { text; vec Card; nat64 };
+  };
+  Raise : record { amount : nat64 };
+  SidePotCreated;
+  Kicked : record { reason : text };
+  PlayersHandsRankedSidePot : record {
+    hands : vec record { text; vec Card; nat64 };
+  };
+  AllIn : record { amount : nat64 };
+  SmallBlind;
+  Check;
+};
+type Card = record { value : Value; suit : Suit };
+type DealStage = variant {
+  Opening;
+  Flop;
+  Turn;
+  River;
+  Showdown;
+  Fresh;
+  Blinds;
+};
+type LogStoreError = variant {
+  DeserializationError : text;
+  CanisterCallError : text;
+  SerializationError : text;
+};
+type Result = variant { Ok; Err : LogStoreError };
+type Result_1 = variant { Ok : vec ActionLog; Err : LogStoreError };
+type Result_2 = variant { Ok : text; Err : LogStoreError };
+type Suit = variant { Spade; Diamond; Club; Heart };
+type Value = variant {
+  Ace;
+  Six;
+  Ten;
+  Two;
+  Eight;
+  Seven;
+  Five;
+  Four;
+  Jack;
+  King;
+  Nine;
+  Three;
+  Queen;
+};
+service : () -> {
+  clear_all_logs : () -> (Result);
+  clear_logs : (principal) -> (Result);
+  clear_logs_before : (principal, nat64) -> (Result);
+  get_action_logs : (principal, nat64, nat64, opt nat32, opt nat32) -> (
+      Result_1,
+    ) query;
+  get_canister_status_formatted : () -> (Result_2);
+  log_action : (principal, ActionLog) -> (Result);
+  log_actions : (principal, vec ActionLog) -> (Result);
+}

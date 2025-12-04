@@ -19,4 +19,4 @@ table_index_types = { path = "../libraries/table_index_types" }
 user = { path = "../libraries/user" }
 tournaments = { path = "../libraries/tournaments" }
 serial_test = "3.2.0"
-currency = { git = "https://github.com/zk-game-dao/currency.git", branch = "main" }
+currency = { git = "https://github.com/trustedpoker/currency.git", branch = "main" }

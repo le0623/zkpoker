@@ -9,7 +9,7 @@ ic-cdk.workspace = true
 ic-stable-structures.workspace = true
 serde.workspace = true
 
-currency = { git = "https://github.com/zk-game-dao/currency.git", branch = "main" }
+currency = { git = "https://github.com/trustedpoker/currency.git", branch = "main" }
 errors = { path = "../errors" }
 macros = { path = "../macros" }
 user = { path = "../user" }

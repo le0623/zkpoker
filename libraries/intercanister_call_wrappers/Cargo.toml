@@ -8,7 +8,7 @@ candid = { workspace = true }
 ic-cdk = { workspace = true }
 
 canister_functions = { path = "../canister_functions" }
-currency = { git = "https://github.com/zk-game-dao/currency.git", branch = "main" }
+currency = { git = "https://github.com/trustedpoker/currency.git", branch = "main" }
 clan = { path = "../clan" }
 errors = { path = "../errors" }
 table = { path = "../table" }

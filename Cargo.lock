@@ -590,7 +590,7 @@ dependencies = [
 [[package]]
 name = "currency"
 version = "0.1.0"
-source = "git+https://github.com/zk-game-dao/currency.git?branch=main#15e22c98d504c02579c5ee2c99d8385857d116f6"
+source = "git+https://github.com/trustedpoker/currency.git?branch=main#e2d56900753ab93eb3de68ad6bbf4d8094bf8e23"
 dependencies = [
  "candid",
  "ic-cdk",

@@ -1,5 +1,7 @@
 use errors::{game_error::GameError, trace_err, traced_error::TracedError};
 
+use crate::poker::game::types::GameType;
+
 use super::{
     action_log::ActionType,
     table::Table,
@@ -66,14 +68,20 @@ impl Table {
         Ok(())
     }
 
-    /// Deals the opening (two) cards to all players
+    /// Deals the opening cards to all players ( 2 for Hold'em, 4 for PLO4, 5 for PLO5)
     ///
     /// # Errors
     ///
     /// - [`GameError::NoCardsLeft`] if there are no cards left in the deck
     /// - [`GameError::Other`] if the user table data cannot be retrieved
     fn deal_opening_cards(&mut self) -> Result<(), TracedError<GameError>> {
-        for _ in 0..2 {
+        let num_hole_cards = match self.config.game_type {
+            GameType::PotLimitOmaha4(_) => 4,
+            GameType::PotLimitOmaha5(_) => 5,
+            _ => 2,
+        };
+
+        for _ in 0..num_hole_cards {
             for user_principal in self.seats.iter() {
                 if let SeatStatus::Occupied(user_principal) = user_principal {
                     let user_table_data =

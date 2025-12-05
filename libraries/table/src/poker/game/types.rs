@@ -57,6 +57,10 @@ pub enum GameType {
     SpreadLimit(u64, u64), // (min_bet, max_bet)
     // Players can bet up to the amount in the pot.
     PotLimit(u64),
+    // Pot Limit Omaha 4-card
+    PotLimitOmaha4(u64),
+    // Pot Limit Omaha 5-card
+    PotLimitOmaha5(u64),
 }
 
 /// A struct that holds a user's hand and rank,

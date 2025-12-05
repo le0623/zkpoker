@@ -4,8 +4,8 @@ use errors::{game_error::GameError, trace_err, traced_error::TracedError};
 use user::user::WalletPrincipalId;
 
 use crate::poker::{
-    core::{Card, Hand, Rank, Rankable},
-    game::{table_functions::table::Pot, types::UserCards},
+    core::{Card, Hand, Rank, Rankable, CardIter},
+    game::{table_functions::table::Pot, types::{GameType, UserCards}},
 };
 
 use super::{
@@ -273,38 +273,123 @@ impl Table {
     /// - [`GameError::PlayerNotFound`] if retrieving a player fails
     fn get_ranked_hands(&mut self) -> Result<Vec<RankedHand>, TracedError<GameError>> {
         let mut ranked_hands: Vec<RankedHand> = Vec::new();
+        let is_omaha = matches!(
+            self.config.game_type,
+            GameType::PotLimitOmaha4(_) | GameType::PotLimitOmaha5(_)
+        );
 
         for user_principal in self.seats.iter() {
             if let SeatStatus::Occupied(user_principal) = user_principal {
-                let user_table_data =
-                    self.user_table_data
-                        .get_mut(user_principal)
-                        .ok_or_else(|| {
-                            trace_err!(TracedError::new(GameError::Other(
-                                "Could not get users table data".to_string(),
-                            )))
-                        })?;
-                if user_table_data.player_action == PlayerAction::Folded
-                    || user_table_data.player_action == PlayerAction::SittingOut
-                    || user_table_data.player_action == PlayerAction::Joining
-                {
-                    continue;
-                }
+                // Clone the cards first to avoid borrow checker issues
+                let hole_cards = {
+                    let user_table_data =
+                        self.user_table_data
+                            .get(user_principal)
+                            .ok_or_else(|| {
+                                trace_err!(TracedError::new(GameError::Other(
+                                    "Could not get users table data".to_string(),
+                                )))
+                            })?;
+                    
+                    if user_table_data.player_action == PlayerAction::Folded
+                        || user_table_data.player_action == PlayerAction::SittingOut
+                        || user_table_data.player_action == PlayerAction::Joining
+                    {
+                        continue;
+                    }
+                    
+                    user_table_data.cards.clone()
+                };
 
-                let user = self
-                    .users
-                    .get_mut(user_principal)
-                    .ok_or_else(|| trace_err!(TracedError::new(GameError::PlayerNotFound)))?;
-                let mut all_cards = user_table_data.cards.clone();
-                all_cards.extend(self.community_cards.clone());
-                let hand = Hand::new_with_cards(all_cards.clone());
-                let rank = hand.rank();
-                ranked_hands.push((user.principal_id, hand, rank, all_cards));
+                // Get principal_id first, then release the borrow
+                let principal_id = {
+                    let user = self
+                        .users
+                        .get(user_principal)
+                        .ok_or_else(|| trace_err!(TracedError::new(GameError::PlayerNotFound)))?;
+                    user.principal_id
+                };
+                
+                let (best_hand, best_rank, all_cards) = if is_omaha {
+                    // Omaha: Must use exactly 2 hole cards + exactly 3 community cards
+                    // Clone community cards to avoid borrow issues
+                    let community_cards = self.community_cards.clone();
+                    self.get_best_omaha_hand(
+                        &hole_cards,
+                        &community_cards,
+                    )?
+                } else {
+                    // Hold'em: Use all cards and find best 5-card hand
+                    let mut all_cards = hole_cards.clone();
+                    all_cards.extend(self.community_cards.clone());
+                    let hand = Hand::new_with_cards(all_cards.clone());
+                    let rank = hand.rank();
+                    (hand, rank, all_cards)
+                };
+
+                ranked_hands.push((principal_id, best_hand, best_rank, all_cards));
             }
         }
 
         // Sort ranked hands by their rank
         ranked_hands.sort_by(|a, b| b.2.cmp(&a.2)); // Descending order
         Ok(ranked_hands)
+    }
+
+    /// Finds the best 5-card hand for Omaha (exactly 2 hole + exactly 3 community)
+    ///
+    /// # Parameters
+    ///
+    /// - `hole_cards`: The player's hole cards (4 or 5 cards)
+    /// - `community_cards`: The 5 community cards
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (best Hand, best Rank, all cards used)
+    fn get_best_omaha_hand(
+        &self,
+        hole_cards: &[Card],
+        community_cards: &[Card],
+    ) -> Result<(Hand, Rank, Vec<Card>), TracedError<GameError>> {
+        if hole_cards.len() < 2 {
+            return Err(trace_err!(TracedError::new(GameError::Other(
+                "Not enough hole cards for Omaha".to_string(),
+            ))));
+        }
+        if community_cards.len() < 3 {
+            return Err(trace_err!(TracedError::new(GameError::Other(
+                "Not enough community cards for Omaha".to_string(),
+            ))));
+        }
+
+        let mut best_rank = Rank::HighCard(0);
+        let mut best_hand = Hand::default();
+        let mut _best_cards = Vec::new();
+
+        // Generate all combinations of 2 hole cards
+        for hole_combo in CardIter::new(hole_cards, 2) {
+            // Generate all combinations of 3 community cards
+            for community_combo in CardIter::new(community_cards, 3) {
+                // Combine to make a 5-card hand
+                let mut five_card_hand: Vec<Card> = hole_combo.clone();
+                five_card_hand.extend(community_combo.clone());
+                
+                let hand = Hand::new_with_cards(five_card_hand.clone());
+                let rank = hand.rank_five(); // Use rank_five for exactly 5 cards (faster)
+
+                // Keep track of the best hand
+                if rank > best_rank {
+                    best_rank = rank;
+                    best_hand = hand;
+                    _best_cards = five_card_hand;
+                }
+            }
+        }
+
+        // Create all_cards for logging (all hole + all community)
+        let mut all_cards = hole_cards.to_vec();
+        all_cards.extend(community_cards.to_vec());
+
+        Ok((best_hand, best_rank, all_cards))
     }
 }

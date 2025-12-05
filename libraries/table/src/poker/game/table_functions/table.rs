@@ -265,6 +265,8 @@ impl Table {
             GameType::SpreadLimit(min, _) => (min / 2, min),
             GameType::FixedLimit(small, _) => (small / 2, small),
             GameType::PotLimit(small) => (small, small * 2),
+            GameType::PotLimitOmaha4(small) => (small, small * 2),
+            GameType::PotLimitOmaha5(small) => (small, small * 2),
         };
         let rake = if let CurrencyType::Real(currency) = &config.currency_type {
             Rake::new(SmallBlind(small_blind), &config.game_type, currency).ok()

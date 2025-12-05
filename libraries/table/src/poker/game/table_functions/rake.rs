@@ -86,7 +86,7 @@ impl Rake {
         }
 
         let rake = match game_type {
-            GameType::NoLimit(_) | GameType::PotLimit(_) => get_no_limit_config(scaled_small_blind),
+            GameType::NoLimit(_) | GameType::PotLimit(_) | GameType::PotLimitOmaha4(_) | GameType::PotLimitOmaha5(_) => get_no_limit_config(scaled_small_blind),
             GameType::FixedLimit(_, _) | GameType::SpreadLimit(_, _) => {
                 get_fixed_limit_configs(scaled_small_blind)
             }

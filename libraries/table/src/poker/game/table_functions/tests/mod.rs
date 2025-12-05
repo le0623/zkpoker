@@ -21,6 +21,8 @@ pub mod general_tests;
 
 pub mod no_limit_tests;
 
+pub mod plo_tests;
+
 pub mod pot_distribution_tests;
 
 pub mod pot_limit;

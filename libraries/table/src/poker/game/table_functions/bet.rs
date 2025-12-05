@@ -63,7 +63,7 @@ impl Table {
                         reason: format!("Bet must be at least {}", self.big_blind.0 as f64 / 1e8),
                     })));
                 }
-                if let GameType::PotLimit(_) = self.config.game_type {
+                if let GameType::PotLimit(_) | GameType::PotLimitOmaha4(_) | GameType::PotLimitOmaha5(_) = self.config.game_type {
                     if amount > self.get_pot()
                         && bet_type != BetType::BigBlind
                         && bet_type != BetType::SmallBlind

@@ -126,28 +126,44 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       const callValue = table.highest_bet;
 
       if (isPotLimit) {
-        const potValue = livePot;
-        const halfPotValue = livePot / 2n;
+        // PLO "Rule of Three" for quick actions
+        // Calculate live pot
+        const livePot = table.user_table_data.reduce(
+          (sum, [, data]) => sum + (data?.current_total_bet ?? 0n),
+          table.pot,
+        );
+        
+        const lastBet = callValue;
+        const potBeforeLastBet = livePot - lastBet;
+        const amountToCall = callValue - currentBet;
+        
+        // Full pot raise: call + pot after call
+        const potAfterCall = potBeforeLastBet + lastBet + amountToCall;
+        const potRaiseTo = callValue + potAfterCall;
+        
+        // Half pot raise: call + (pot after call / 2)
+        const halfPotRaiseTo = callValue + (potAfterCall / 2n);
+        
         const minIncrement = table.big_blind || 1n;
+        const minRaiseTo = callValue + minIncrement;
 
         // Pot
-        if (potValue > currentBet && getPrice(potValue) <= tableUser.balance) {
-          _quickActions.push([potValue, "Pot"]);
+        if (potRaiseTo > currentBet && getPrice(potRaiseTo) <= tableUser.balance) {
+          _quickActions.push([potRaiseTo, "Pot"]);
         }
         // 1/2 Pot
-        if (halfPotValue > currentBet && halfPotValue < potValue && getPrice(halfPotValue) <= tableUser.balance) {
-          _quickActions.push([halfPotValue, "1/2 Pot"]);
+        if (halfPotRaiseTo > currentBet && halfPotRaiseTo < potRaiseTo && getPrice(halfPotRaiseTo) <= tableUser.balance) {
+          _quickActions.push([halfPotRaiseTo, "1/2 Pot"]);
         }
-        // Min raise: call + increment, capped at pot
-        const minRaise = callValue + minIncrement;
-        const validMinRaise = minRaise <= potValue ? minRaise : potValue;
+        // Min raise
         if (
-          validMinRaise > currentBet &&
-          validMinRaise !== potValue &&
-          validMinRaise !== halfPotValue &&
-          getPrice(validMinRaise) <= tableUser.balance
+          minRaiseTo > currentBet &&
+          minRaiseTo !== potRaiseTo &&
+          minRaiseTo !== halfPotRaiseTo &&
+          minRaiseTo <= potRaiseTo &&
+          getPrice(minRaiseTo) <= tableUser.balance
         ) {
-          _quickActions.push([validMinRaise, "Min"]);
+          _quickActions.push([minRaiseTo, "Min"]);
         }
       } else {
         // Non pot-limit logic (original)
@@ -183,7 +199,23 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       // All-in
       if (tableUser.balance > 0n) {
         const allInValue = currentBet + tableUser.balance;
-        if (!isPotLimit || allInValue <= livePot) {
+        if (isPotLimit) {
+          // Only show all-in if it's within pot limit
+          const livePot = table.user_table_data.reduce(
+            (sum, [, data]) => sum + (data?.current_total_bet ?? 0n),
+            table.pot,
+          );
+          
+          const lastBet = callValue;
+          const potBeforeLastBet = livePot - lastBet;
+          const amountToCall = callValue - currentBet;
+          const potAfterCall = potBeforeLastBet + lastBet + amountToCall;
+          const maxPotRaise = callValue + potAfterCall;
+          
+          if (allInValue <= maxPotRaise) {
+            _quickActions.push([allInValue, "All in"]);
+          }
+        } else {
           _quickActions.push([allInValue, "All in"]);
         }
       }
@@ -199,7 +231,6 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       getPrice,
       isUserTurn,
       meta,
-      livePot,
     ]);
 
     // Exclude "All in" from raise quick actions
@@ -221,7 +252,37 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
 
       let calculatedMax: bigint;
       if (isPotLimit) {
-        calculatedMax = livePot;
+        // PLO "Rule of Three" Calculation
+        // Formula: Max raise-to = 3 × (last bet) + (pot before last bet)
+        // Which simplifies to: Max = call + (pot_before + last_bet + call)
+        //
+        // Example: $20 in pot, opponent bets $10
+        //   - Pot before bet: $20
+        //   - Last bet: $10
+        //   - Your call: $10
+        //   - Pot after call: $20 + $10 + $10 = $40
+        //   - Max raise-to: $10 (call) + $40 (pot) = $50
+        
+        // Step 1: Calculate live pot (pot from previous streets + current street bets)
+        const livePot = table.user_table_data.reduce(
+          (sum, [, data]) => sum + (data?.current_total_bet ?? 0n),
+          table.pot,
+        );
+        
+        // Step 2: Determine components
+        const lastBet = callValue;
+        const potBeforeLastBet = livePot - lastBet;
+        const amountToCall = callValue - currentBet;
+        
+        // Step 3: Calculate pot after you call
+        const potAfterCall = potBeforeLastBet + lastBet + amountToCall;
+        
+        // Step 4: Max raise-to = call value + pot after call
+        const maxRaiseAmount = callValue + potAfterCall;
+        
+        // Step 5: Cap at all-in
+        const allInAmount = currentBet + tableUser.balance;
+        calculatedMax = maxRaiseAmount < allInAmount ? maxRaiseAmount : allInAmount;
       } else {
         calculatedMax = currentBet + tableUser.balance;
       }
@@ -247,7 +308,7 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
 
       if (calculatedMin > calculatedMax) return [calculatedMax, calculatedMax];
       return [calculatedMin, calculatedMax];
-    }, [raiseActions, table, user, tableUser, livePot]);
+    }, [raiseActions, table, user, tableUser]);
 
     useEffect(() => {
       setRaiseTo((v) =>

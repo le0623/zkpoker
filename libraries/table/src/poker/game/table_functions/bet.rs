@@ -63,27 +63,64 @@ impl Table {
                         reason: format!("Bet must be at least {}", self.big_blind.0 as f64 / 1e8),
                     })));
                 }
-                if let GameType::PotLimit(_) | GameType::PotLimitOmaha4(_) | GameType::PotLimitOmaha5(_) = self.config.game_type {
-                    if amount > self.get_pot()
-                        && bet_type != BetType::BigBlind
-                        && bet_type != BetType::SmallBlind
-                    {
-                        return Err(trace_err!(TracedError::new(GameError::ActionNotAllowed {
-                            reason: "Bet must be less than the pot".to_string(),
-                        })));
-                    }
-                }
 
+                // Get user data before validation
                 let user = self.get_user_table_data_mut(user_principal).map_err(|e| {
                     trace_err!(
                         e,
                         "Failed to get user table data to calculate normal bet amount."
                     )
                 })?;
-                let normal_amount = amount - user.current_total_bet;
+                let current_bet = user.current_total_bet;
+                let normal_amount = amount - current_bet;
 
                 self.check_user_balance(normal_amount, user_principal)
                     .map_err(|e| trace_err!(e, "Failed to check user balance."))?;
+
+                // PLO "Rule of Three" validation
+                // In Pot Limit games, the maximum bet is calculated as:
+                //   Max raise-to = 3 × (last bet) + (pot before last bet)
+                // Which simplifies to: Max = call + (pot_before + last_bet + call)
+                //
+                // Example: $20 in pot, opponent bets $10
+                //   - Pot before bet: $20
+                //   - Last bet: $10  
+                //   - Your call: $10
+                //   - Pot after call: $20 + $10 + $10 = $40
+                //   - Max raise-to: $10 (call) + $40 (pot) = $50
+                if let GameType::PotLimit(_) | GameType::PotLimitOmaha4(_) | GameType::PotLimitOmaha5(_) = self.config.game_type {
+                    if bet_type != BetType::BigBlind && bet_type != BetType::SmallBlind {
+                        // Step 1: Calculate live pot (pot from previous streets + current street bets)
+                        let mut live_pot = self.pot.0;
+                        for user_data in &self.user_table_data {
+                            live_pot = live_pot.saturating_add(user_data.1.current_total_bet);
+                        }
+                        
+                        // Step 2: Determine components
+                        let last_bet = self.highest_bet;
+                        let pot_before_last_bet = live_pot.saturating_sub(last_bet);
+                        let amount_to_call = last_bet.saturating_sub(current_bet);
+                        
+                        // Step 3: Calculate pot after player calls
+                        let pot_after_call = pot_before_last_bet
+                            .saturating_add(last_bet)
+                            .saturating_add(amount_to_call);
+                        
+                        // Step 4: Max raise-to = call value + pot after call
+                        let max_raise_to = last_bet.saturating_add(pot_after_call);
+                        
+                        // Step 5: Validate bet doesn't exceed pot limit
+                        if amount > max_raise_to {
+                            return Err(trace_err!(TracedError::new(GameError::ActionNotAllowed {
+                                reason: format!(
+                                    "Bet exceeds pot limit. Max allowed: {}, attempted: {}",
+                                    max_raise_to as f64 / 1e8,
+                                    amount as f64 / 1e8
+                                ),
+                            })));
+                        }
+                    }
+                }
 
                 match self.config.game_type {
                     GameType::FixedLimit(small, big) => self.handle_fixed_limit(

@@ -14,6 +14,7 @@ export const TurnButtonsComponent = memo(() => {
   const { orientation } = useTableUIContext();
   const { currencyType: currency } = useTable();
   const meta = useCurrencyManagerMeta(currency);
+  console.log(raise?.min, raise?.max, "raise min max");
   const rangeLabel =
     raise && raise.min !== undefined && raise.max !== undefined
       ? `${TokenAmountToString(raise.min, meta)} ~ ${TokenAmountToString(raise.max, meta)}`

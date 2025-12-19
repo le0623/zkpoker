@@ -38,7 +38,7 @@ export const TurnButtonsComponent = memo(() => {
         />
         {rangeLabel && <div className="text-xs text-white/70">{rangeLabel}</div>}
         <WeirdKnobComponent variant="black" {...raise.cta}>
-          Raise
+          {raise.actionLabel}
         </WeirdKnobComponent>
       </div>
     );
@@ -85,7 +85,7 @@ export const TurnButtonsComponent = memo(() => {
         </WeirdKnobComponent>
       )}
 
-      {/* Raise */}
+      {/* Bet/Raise */}
       {raise && (
         <>
           {orientation === "landscape" || raise.showInlineInput ? (
@@ -94,7 +94,7 @@ export const TurnButtonsComponent = memo(() => {
                 <HudSeperator />
               ) : (
                 <WeirdKnobComponent variant="black" {...raise.cta}>
-                  Raise
+                  {raise.actionLabel}
                 </WeirdKnobComponent>
               )}
               <CurrencyInputComponent
@@ -109,7 +109,7 @@ export const TurnButtonsComponent = memo(() => {
               />
               {rangeLabel && <div className="text-xs text-white/70">{rangeLabel}</div>}
               <WeirdKnobComponent variant="black" {...raise.cta}>
-                Raise
+                {raise.actionLabel}
               </WeirdKnobComponent>
             </>
           ) : (
@@ -119,7 +119,7 @@ export const TurnButtonsComponent = memo(() => {
                 straightLeftMobile={!!fold || !!check || !!call || !!allIn}
                 mutate={() => raise.setShowInlineInput(true)}
               >
-                Raise
+                {raise.actionLabel}
               </WeirdKnobComponent>
             </>
           )}

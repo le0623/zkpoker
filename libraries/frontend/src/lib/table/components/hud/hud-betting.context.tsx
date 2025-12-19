@@ -17,7 +17,7 @@ import { useSound } from '../../../../context/sound.context';
 import { useMyTableUser, useTable } from '../../context/table.context';
 
 export type HUDContextType = {
-  // Raising
+  // Raising/Betting
   raise?: {
     quickActions: [bigint, string][];
     value: bigint;
@@ -26,7 +26,8 @@ export type HUDContextType = {
     max: bigint;
     showInlineInput: boolean;
     setShowInlineInput(show: boolean): void;
-    // step: bigint;
+    isOpeningBet: boolean;
+    actionLabel: string; // "Bet" or "Raise"
 
     cta: {
       mutateExplicit(raiseValue: bigint): Promise<void>;
@@ -99,6 +100,10 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       table,
       userIndex,
     ]);
+
+    // Detect if this is an opening bet (no one has bet yet on this street)
+    const isOpeningBet = useMemo(() => table.highest_bet === 0n, [table.highest_bet]);
+    const betActionLabel = useMemo(() => isOpeningBet ? "Bet" : "Raise", [isOpeningBet]);
 
     const getRaiseToFromDelta = useCallback(
       (delta: bigint) => callValue + delta,
@@ -288,7 +293,10 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       }
 
       let calculatedMin: bigint;
-      if (isPotLimit) {
+      if (isOpeningBet) {
+        // Opening bet: minimum is big blind
+        calculatedMin = table.big_blind || 1n;
+      } else if (isPotLimit) {
         const minFromCall = callValue + minIncrement;
         const minFromCurrent = currentBet + 1n;
         calculatedMin = minFromCall > minFromCurrent ? minFromCall : minFromCurrent;
@@ -461,6 +469,8 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
           change: setRaiseTo,
           showInlineInput,
           setShowInlineInput,
+          isOpeningBet,
+          actionLabel: betActionLabel,
           cta: {
             async mutateExplicit(raiseValue) {
               setRaiseTo(raiseValue);
@@ -513,6 +523,8 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       play,
       showErrorModal,
       isUserTurn,
+      isOpeningBet,
+      betActionLabel,
     ]);
 
     return <HUDContext.Provider value={value}>{children}</HUDContext.Provider>;

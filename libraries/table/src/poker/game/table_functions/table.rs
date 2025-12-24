@@ -117,6 +117,14 @@ pub struct Table {
     pub queue: Vec<QueueItem>,
     pub rake_config: Option<Rake>,
     pub rake_total: Option<u64>,
+    
+    // RNG Transparency fields
+    /// History of RNG metadata for each shuffle (for transparency dashboard)
+    pub rng_history: Vec<crate::poker::game::types::RngMetadata>,
+    
+    /// Card provenance mapping: card_hash -> CardProvenance
+    /// Tracks the journey of each card through the shuffle
+    pub card_provenance: HashMap<String, crate::poker::game::types::CardProvenance>,
 }
 
 impl Default for TableConfig {
@@ -207,6 +215,8 @@ impl Default for Table {
             queue: Vec::new(),
             rake_config: None,
             rake_total: None,
+            rng_history: Vec::new(),
+            card_provenance: HashMap::new(),
         }
     }
 }
@@ -309,6 +319,8 @@ impl Table {
             queue: Vec::new(),
             rake_config: rake,
             rake_total: Some(0),
+            rng_history: Vec::new(),
+            card_provenance: HashMap::new(),
         }
     }
 
@@ -511,14 +523,24 @@ impl Table {
             }
         }
 
+        // Calculate and store last_raise as the increment (size of the raise)
+        // This is used for minimum raise calculations on subsequent actions
+        // Rules:
+        // - For opening bets: increment = amount (since highest_bet = 0)
+        // - For raises: increment = amount - old_highest_bet
+        // - For blinds: increment = blind amount
+        // Note: last_raise is reset to 0 when a new betting street starts (flop/turn/river)
+        let old_highest_bet = self.highest_bet;
         self.last_raise = match bet_type {
-            BetType::Raised(_) => amount.saturating_sub(self.last_raise),
+            BetType::Raised(_) => {
+                // The increment is the amount above the previous highest bet
+                amount.saturating_sub(old_highest_bet)
+            },
             BetType::BigBlind => self.big_blind.0,
             BetType::SmallBlind => self.small_blind.0,
             _ => 0,
         };
         self.last_raise_principal = user_principal;
-        self.last_raise = amount;
 
         self.update_highest_bet(user_principal)
             .map_err(|e| trace_err!(e, "Failed to update highest bet."))?;

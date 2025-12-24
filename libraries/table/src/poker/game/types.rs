@@ -323,6 +323,10 @@ pub struct StorableTable {
     pub last_timer_started_timestamp: u64,
     pub users: Users,
     pub queue: Vec<QueueItem>,
+    
+    // RNG Transparency fields
+    pub rng_history: Vec<RngMetadata>,
+    pub card_provenance: HashMap<String, CardProvenance>,
 }
 
 impl Default for StorableTable {
@@ -356,6 +360,8 @@ impl Default for StorableTable {
             last_timer_started_timestamp: 0,
             users: Users::new(),
             queue: Vec::new(),
+            rng_history: Vec::new(),
+            card_provenance: HashMap::new(),
         }
     }
 }
@@ -395,6 +401,8 @@ impl From<StorableTable> for Table {
             queue: storable_table.queue,
             rake_config: None,
             rake_total: None,
+            rng_history: storable_table.rng_history,
+            card_provenance: storable_table.card_provenance,
         }
     }
 }
@@ -430,6 +438,8 @@ impl From<Table> for StorableTable {
             last_timer_started_timestamp: table.last_timer_started_timestamp,
             users: table.users,
             queue: table.queue,
+            rng_history: table.rng_history,
+            card_provenance: table.card_provenance,
         }
     }
 }
@@ -441,4 +451,116 @@ impl PublicTable {
             _ => Err(GameError::PlayerNotFound),
         }
     }
+}
+
+// ============================================================================
+// RNG Transparency Structures
+// ============================================================================
+
+/// RNG Metadata for transparency and verification
+/// 
+/// This structure stores all information needed to verify the fairness
+/// of card dealing in a poker game, including the raw random bytes from
+/// the Internet Computer's management canister, time seeds, and the
+/// resulting shuffled deck.
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct RngMetadata {
+    /// The game round ID (incrementing counter for each new shuffle)
+    pub round_id: u64,
+
+    /// Raw random bytes from IC management canister (32 bytes)
+    /// This is the source of randomness from the blockchain's VRF
+    pub raw_random_bytes: Vec<u8>,
+
+    /// Time seed used for reshuffling (nanoseconds since Unix epoch)
+    /// Adds additional entropy to the shuffle process
+    pub time_seed: u64,
+
+    /// Timestamp of RNG generation (nanoseconds since Unix epoch)
+    pub timestamp_ns: u64,
+
+    /// Hash of the final shuffled deck (for quick verification)
+    /// SHA-256 hash of the shuffled card order
+    pub deck_hash: String,
+
+    /// Transaction/call ID from IC management canister (if available)
+    /// Can be used to trace back to the on-chain randomness call
+    pub ic_transaction_id: Option<String>,
+
+    /// The shuffled card order (52 cards)
+    /// The complete deck after Fisher-Yates shuffle
+    pub shuffled_deck: Vec<Card>,
+}
+
+impl Default for RngMetadata {
+    fn default() -> Self {
+        RngMetadata {
+            round_id: 0,
+            raw_random_bytes: Vec::new(),
+            time_seed: 0,
+            timestamp_ns: 0,
+            deck_hash: String::new(),
+            ic_transaction_id: None,
+            shuffled_deck: Vec::new(),
+        }
+    }
+}
+
+/// Card Provenance tracks the journey of a single card through the shuffle
+/// 
+/// This allows players to verify exactly where each card came from and
+/// how it ended up in their hand, providing complete transparency.
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct CardProvenance {
+    /// The card (e.g., Ace of Spades)
+    pub card: Card,
+
+    /// Original position in unshuffled deck (0-51)
+    /// Standard order: A♠, 2♠, ..., K♠, A♥, ..., K♦
+    pub original_position: u8,
+
+    /// Position after Fisher-Yates shuffle (0-51)
+    pub shuffled_position: u8,
+
+    /// Hash identifier for this specific card in this game
+    /// Format: SHA-256(round_id + card + shuffled_position)
+    pub card_hash: String,
+
+    /// Which player received this card (if dealt)
+    pub dealt_to: Option<WalletPrincipalId>,
+
+    /// When was this card dealt (PreFlop, Flop, Turn, River)
+    pub dealt_at_stage: Option<DealStage>,
+}
+
+impl Default for CardProvenance {
+    fn default() -> Self {
+        CardProvenance {
+            card: Card::new(crate::poker::core::Value::Two, crate::poker::core::Suit::Spade),
+            original_position: 0,
+            shuffled_position: 0,
+            card_hash: String::new(),
+            dealt_to: None,
+            dealt_at_stage: None,
+        }
+    }
+}
+
+/// Statistics about RNG transparency data
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct RngStats {
+    /// Total number of rounds with RNG data
+    pub total_rounds: u64,
+    
+    /// Total number of cards being tracked
+    pub total_cards_tracked: u64,
+    
+    /// The oldest round ID in history
+    pub oldest_round_id: Option<u64>,
+    
+    /// The latest round ID in history
+    pub latest_round_id: Option<u64>,
+    
+    /// Current round ticker from the table
+    pub current_round_ticker: u64,
 }

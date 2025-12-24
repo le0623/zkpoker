@@ -65,17 +65,66 @@ impl Table {
                 }
 
                 // Get user data before validation
-                let user = self.get_user_table_data_mut(user_principal).map_err(|e| {
+                let user_table_data = self.get_user_table_data_mut(user_principal).map_err(|e| {
                     trace_err!(
                         e,
                         "Failed to get user table data to calculate normal bet amount."
                     )
                 })?;
-                let current_bet = user.current_total_bet;
+                let current_bet = user_table_data.current_total_bet;
                 let normal_amount = amount - current_bet;
 
                 self.check_user_balance(normal_amount, user_principal)
                     .map_err(|e| trace_err!(e, "Failed to check user balance."))?;
+
+                // Get the user's balance to check for all-in
+                let user_balance = self
+                    .users
+                    .get(&user_principal)
+                    .ok_or_else(|| trace_err!(TracedError::new(GameError::PlayerNotFound)))?
+                    .balance
+                    .0;
+
+                // Minimum raise validation
+                // Rules:
+                // - Pre-flop: Minimum raise = big blind
+                // - Post-flop: Minimum raise = size of last bet/raise (last_raise increment)
+                // - All-ins are always allowed, even if below minimum raise
+                // - Calls (amount == highest_bet) are not subject to minimum raise rules
+                let is_opening_bet = self.highest_bet == 0;
+                let min_raise_increment = if is_opening_bet {
+                    // Pre-flop: minimum is big blind
+                    self.big_blind.0
+                } else {
+                    // Post-flop: minimum is the size of the last raise
+                    // If last_raise is 0 (new street started, no previous raise), fallback to big_blind
+                    if self.last_raise > 0 {
+                        self.last_raise
+                    } else {
+                        self.big_blind.0
+                    }
+                };
+                
+                // Calculate minimum raise-to amount
+                let min_raise_to = self.highest_bet.saturating_add(min_raise_increment);
+                
+                // Check if this would be an all-in (balance becomes 0 or negative after this bet)
+                let would_be_all_in = user_balance.saturating_sub(normal_amount) == 0;
+                
+                // Validate minimum raise requirements
+                // Only validate if:
+                // 1. It's a raise (amount > highest_bet), not a call
+                // 2. It's below minimum (amount < min_raise_to)
+                // 3. It's NOT an all-in (all-ins are always allowed)
+                if amount > self.highest_bet && amount < min_raise_to && !would_be_all_in {
+                    return Err(trace_err!(TracedError::new(GameError::ActionNotAllowed {
+                        reason: format!(
+                            "Minimum raise is {}. Attempted: {}",
+                            min_raise_to as f64 / 1e8,
+                            amount as f64 / 1e8
+                        ),
+                    })));
+                }
 
                 // PLO "Rule of Three" validation
                 // In Pot Limit games, the maximum bet is calculated as:

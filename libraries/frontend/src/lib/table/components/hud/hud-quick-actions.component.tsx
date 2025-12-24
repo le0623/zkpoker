@@ -16,7 +16,7 @@ export const HUDQuickActionComponent = memo<{
       onClick={onClick}
       className={classNames(
         "flex material leading-none transition-all duration-200 relative",
-        "text-white type-button-2 p-4 rounded-[14.4px]",
+        "text-white type-button-2 p-3 rounded-[14.4px]",
         "active:scale-95 hover:scale-105",
         isSelected 
           ? "bg-material-main-3 bg-opacity-100 shadow-lg ring-2 ring-white ring-opacity-50" 
@@ -70,7 +70,7 @@ export const HUDQuickActionsComponent = memo<HUDQuickActionsComponentProps>(({ q
       initial="hidden"
       animate="visible"
       exit="hidden"
-      className="flex flex-row justify-center items-end gap-2 whitespace-nowrap px-4 relative z-11"
+      className="flex flex-row justify-center items-center mt-3 gap-2 whitespace-nowrap px-4 relative"
     >
       <div className='absolute inset-3 bg-black blur-2xl opacity-30' />
       {quickActions.map(([amount, label]) => (

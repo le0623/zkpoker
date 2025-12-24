@@ -44,7 +44,7 @@ export const BigIntToFloat = <
 export const BigIntToString = (
   amount: bigint,
   decimals: number,
-  renderedDecimalPlaces = 2
+  renderedDecimalPlaces = 4
 ) => {
   if (decimals === 0) return amount.toString();
   const beforeDot = amount.toString().slice(0, -decimals);

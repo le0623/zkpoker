@@ -26,6 +26,11 @@ impl FlatDeck {
         self.cards.is_empty()
     }
 
+    /// Get a slice of all cards in the deck
+    pub fn cards(&self) -> &[Card] {
+        &self.cards
+    }
+
     /// Randomly shuffle the flat deck.
     /// This will ensure the there's no order to the deck.
     pub fn shuffle(&mut self, rand_bytes: Vec<u8>) {

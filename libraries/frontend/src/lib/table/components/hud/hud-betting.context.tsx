@@ -28,6 +28,8 @@ export type HUDContextType = {
     setShowInlineInput(show: boolean): void;
     isOpeningBet: boolean;
     actionLabel: string; // "Bet" or "Raise"
+    isPLO: boolean; // Is this a PLO4/PLO5 game?
+    canRaise: boolean; // Can player raise, or only all-in? (PLO only)
 
     cta: {
       mutateExplicit(raiseValue: bigint): Promise<void>;
@@ -105,6 +107,18 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
     const isOpeningBet = useMemo(() => table.highest_bet === 0n, [table.highest_bet]);
     const betActionLabel = useMemo(() => isOpeningBet ? "Bet" : "Raise", [isOpeningBet]);
 
+    // Calculate minimum raise increment based on poker rules:
+    // - Pre-flop: big blind
+    // - Post-flop: size of last bet/raise (last_raise), fallback to big_blind if 0 (new street)
+    const minRaiseIncrement = useMemo(() => {
+      if (isOpeningBet) {
+        return table.big_blind || 1n;
+      }
+      // Post-flop: use last_raise if available, otherwise fallback to big_blind
+      // last_raise is 0 when a new betting street starts (flop/turn/river)
+      return table.last_raise > 0n ? table.last_raise : (table.big_blind || 1n);
+    }, [isOpeningBet, table.big_blind, table.last_raise]);
+
     const getRaiseToFromDelta = useCallback(
       (delta: bigint) => callValue + delta,
       [table, user],
@@ -149,8 +163,8 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
         // Half pot raise: call + (pot after call / 2)
         const halfPotRaiseTo = callValue + (potAfterCall / 2n);
         
-        const minIncrement = table.big_blind || 1n;
-        const minRaiseTo = callValue + minIncrement;
+        // Use last_raise increment for post-flop, big_blind for pre-flop
+        const minRaiseTo = callValue + minRaiseIncrement;
 
         // Pot
         if (potRaiseTo > currentBet && getPrice(potRaiseTo) <= tableUser.balance) {
@@ -236,6 +250,7 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       getPrice,
       isUserTurn,
       meta,
+      minRaiseIncrement,
     ]);
 
     // Exclude "All in" from raise quick actions
@@ -253,7 +268,6 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
 
       const currentBet = user.data.current_total_bet;
       const callValue = table.highest_bet;
-      const minIncrement = table.big_blind || 1n;
 
       let calculatedMax: bigint;
       if (isPotLimit) {
@@ -294,29 +308,24 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
 
       let calculatedMin: bigint;
       if (isOpeningBet) {
-        // Opening bet: minimum is big blind
+        // Pre-flop: minimum raise = big blind
         calculatedMin = table.big_blind || 1n;
-      } else if (isPotLimit) {
-        const minFromCall = callValue + minIncrement;
-        const minFromCurrent = currentBet + 1n;
-        calculatedMin = minFromCall > minFromCurrent ? minFromCall : minFromCurrent;
-        if (calculatedMin > calculatedMax) calculatedMin = calculatedMax;
       } else {
-        calculatedMin = callValue + minIncrement;
+        // Post-flop: minimum raise = size of last bet/raise
+        // minRaiseIncrement is already calculated above and handles the fallback logic
+        calculatedMin = callValue + minRaiseIncrement;
+        
+        // For pot limit: ensure min doesn't exceed max (can happen if pot is small)
+        if (isPotLimit && calculatedMin > calculatedMax) {
+          calculatedMin = calculatedMax;
+        }
       }
 
-      if (raiseActions.length > 0) {
-        const actionMin = raiseActions[0][0];
-        const actionMax = raiseActions[raiseActions.length - 1][0];
-        const finalMin = actionMin > calculatedMin ? actionMin : calculatedMin;
-        const finalMax = actionMax < calculatedMax ? actionMax : calculatedMax;
-        if (finalMin > finalMax) return [finalMax, finalMax];
-        return [finalMin, finalMax];
-      }
-
+      // Don't clamp max based on quick actions - let the user input any value up to the theoretical max
+      // Quick actions are just suggestions, not limits
       if (calculatedMin > calculatedMax) return [calculatedMax, calculatedMax];
       return [calculatedMin, calculatedMax];
-    }, [raiseActions, table, user, tableUser]);
+    }, [raiseActions, table, user, tableUser, isOpeningBet, minRaiseIncrement]);
 
     useEffect(() => {
       setRaiseTo((v) =>
@@ -458,9 +467,18 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
         "PotLimitOmaha4" in table.config.game_type ||
         "PotLimitOmaha5" in table.config.game_type;
 
+      // Check if this is PLO4 or PLO5 specifically (not just any pot limit)
+      const isPLO = "PotLimitOmaha4" in table.config.game_type ||
+        "PotLimitOmaha5" in table.config.game_type;
+
       // For pot limit: always show raise controls on your turn
       // For others: show when we have any raise actions
       if ((isPotLimit && isUserTurn && user?.data && tableUser) || (!isPotLimit && raiseActions.length > 0)) {
+        // Check if player can raise or only all-in (for PLO games)
+        const currentBet = user?.data?.current_total_bet ?? 0n;
+        const allInAmount = currentBet + (tableUser?.balance ?? 0n);
+        const canRaise = allInAmount > min;
+
         v.raise = {
           min,
           max,
@@ -471,6 +489,8 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
           setShowInlineInput,
           isOpeningBet,
           actionLabel: betActionLabel,
+          isPLO,
+          canRaise,
           cta: {
             async mutateExplicit(raiseValue) {
               setRaiseTo(raiseValue);
@@ -525,6 +545,7 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
       isUserTurn,
       isOpeningBet,
       betActionLabel,
+      minRaiseIncrement,
     ]);
 
     return <HUDContext.Provider value={value}>{children}</HUDContext.Provider>;

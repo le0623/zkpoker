@@ -1,13 +1,15 @@
 import classNames from 'classnames';
 import { AnimatePresence, motion } from 'framer-motion';
-import { memo, useMemo, useState } from 'react';
+import React, { memo, useMemo, useState, useCallback, useEffect } from 'react';
 
 import { useUser } from '@lib/user';
+import { TokenAmountToString } from '@lib/utils/token-amount-conversion';
 import {
   ButtonComponent, DynamicSizeComponent, Modal, ModalFooterPortal, TitleTextComponent,
   UnwrapOptional,
   WeirdKnobComponent
 } from '@zk-game-dao/ui';
+import { CurrencyInputComponent, useCurrencyManagerMeta } from '@zk-game-dao/currency';
 
 import {
   useCurrentTableTurnProgressRemainder, useNewRoundProgress, useTable
@@ -20,6 +22,122 @@ import { HUDQuickActionsComponent } from './hud-quick-actions.component';
 import { HudSeperator } from './hud-seperator.component';
 import { useTournament } from '../../../tournament/context/tournament.context';
 import { useEnterTexts } from '../../../tournament/components/enter-modal.component';
+
+// Helper component to handle the input row with hooks
+const HUDInputRow = memo<{ raise: any; currencyType: any }>(({ raise, currencyType }) => {
+  const meta = useCurrencyManagerMeta(currencyType);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  const handleSliderChange = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const padding = 24; // px-6 = 24px on each side
+    const effectiveWidth = rect.width - (padding * 2);
+    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth));
+    const range = Number(raise.max) - Number(raise.min);
+    const newValue = BigInt(Math.round(Number(raise.min) + percent * range));
+    raise.change(newValue);
+  }, [raise]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    handleSliderChange(e);
+  }, [handleSliderChange]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging) return;
+    const slider = document.getElementById('raise-slider');
+    if (!slider) return;
+    
+    const rect = slider.getBoundingClientRect();
+    const padding = 24; // px-6 = 24px on each side
+    const effectiveWidth = rect.width - (padding * 2);
+    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth));
+    const range = Number(raise.max) - Number(raise.min);
+    const newValue = BigInt(Math.round(Number(raise.min) + percent * range));
+    raise.change(newValue);
+  }, [isDragging, raise]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, handleMouseMove, handleMouseUp]);
+
+  return (
+    <motion.div
+      variants={{
+        visible: {
+          opacity: 1,
+          y: -8,
+          scale: 1,
+        },
+        hidden: {
+          opacity: 0,
+          y: 16,
+          scale: 0.9,
+        },
+      }}
+      initial="hidden"
+      animate="visible"
+      exit="hidden"
+      className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11 flex-wrap"
+    >
+      <div className='absolute inset-3 bg-black blur-2xl opacity-30' />
+      <div className='flex items-center justify-center gap-1 relative z-10'>
+      <HUDQuickActionsComponent
+        quickActions={raise.quickActions}
+        onChange={raise.change}
+        currentValue={raise.value}
+      />
+      <CurrencyInputComponent
+        currencyType={currencyType}
+        value={raise.value}
+        onChange={raise.change}
+        min={raise.min}
+        max={raise.max}
+        className="w-32 rounded-xl bg-neutral-400 bg-opacity-70"
+        hideMaxQuickAction
+        hideMinQuickAction
+      />
+      {raise.min !== undefined && raise.max !== undefined && (
+        <div className="flex flex-col gap-1 min-w-[120px]">
+          {/* Interactive Slider bar - expanded clickable area */}
+          <div 
+            id="raise-slider"
+            className="relative h-12 cursor-pointer flex items-center px-6"
+            onMouseDown={handleMouseDown}
+          >
+            {/* Visual track */}
+            <div className="absolute left-6 right-6 h-2 bg-neutral-600 bg-opacity-50 rounded-full" />
+            
+            {/* Chip indicator - positioned relative to track */}
+            <img
+              src="/icons/chip-black.svg"
+              alt="slider"
+              className={`absolute top-1/2 -translate-y-1/2 w-12 h-12 pointer-events-none ${isDragging ? 'scale-110' : ''} transition-all duration-150 z-10`}
+              style={{
+                left: `calc((100% - 48px) * ${Math.min(1, Math.max(0, 
+                  ((Number(raise.value) - Number(raise.min)) / (Number(raise.max) - Number(raise.min)))
+                ))})`
+              }}
+            />
+          </div>
+        </div>
+      )}
+      </div>
+    </motion.div>
+  );
+});
+HUDInputRow.displayName = 'HUDInputRow';
 
 export const HUDComponent = memo(() => {
   const { isOngoing, table, isJoined, userIndex, user } = useTable();
@@ -50,7 +168,7 @@ export const HUDComponent = memo(() => {
         >
           <ProvideHUDBettingContext>
             <HUDBettingConsumer>
-              {({ raise }) => (
+              {({ raise, currencyType }) => (
                 <AnimatePresence>
                   {(
                     isJoined &&
@@ -59,11 +177,7 @@ export const HUDComponent = memo(() => {
                     raise &&
                     raise.quickActions?.length > 0
                   ) && (
-                      <HUDQuickActionsComponent
-                        quickActions={raise.quickActions}
-                        onChange={raise.change}
-                        currentValue={raise.value}
-                      />
+                      <HUDInputRow raise={raise} currencyType={currencyType} />
                     )}
                 </AnimatePresence>
               )}

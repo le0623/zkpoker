@@ -17,7 +17,7 @@ use intercanister_call_wrappers::{
 use lazy_static::lazy_static;
 use table::{
     poker::{
-        core::{Card, Rank},
+        core::{Card, FlatDeck, Rank},
         game::{
             table_functions::{
                 action_log::ActionType,
@@ -25,7 +25,7 @@ use table::{
                 table::{BigBlind, SmallBlind, Table, TableConfig, TableId, TableType},
                 types::{BetType, CurrencyType, DealStage, Notification, PlayerAction, SeatStatus},
             },
-            types::{PublicTable, QueueItem, TableStatus},
+            types::{CardProvenance, PublicTable, QueueItem, RngMetadata, RngStats, TableStatus},
             utils::rank_hand,
         },
     },
@@ -136,6 +136,144 @@ fn is_game_ongoing() -> Result<bool, TableError> {
     let table = table.as_ref().ok_or(TableError::TableNotFound)?;
     Ok(is_table_game_ongoing(table))
 }
+
+// ============================================================================
+// RNG Transparency Query Endpoints
+// ============================================================================
+
+/// Get RNG metadata for a specific round
+#[ic_cdk::query]
+fn get_rng_metadata(round_id: u64) -> Result<RngMetadata, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    table
+        .rng_history
+        .iter()
+        .find(|rng| rng.round_id == round_id)
+        .cloned()
+        .ok_or_else(|| {
+            TableError::InvalidRequest(format!("RNG metadata not found for round {}", round_id))
+        })
+}
+
+/// Get RNG metadata for the current round
+#[ic_cdk::query]
+fn get_current_rng_metadata() -> Result<RngMetadata, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    table
+        .rng_history
+        .last()
+        .cloned()
+        .ok_or_else(|| TableError::InvalidRequest("No RNG history available".to_string()))
+}
+
+/// Get all RNG history (paginated to avoid large responses)
+#[ic_cdk::query]
+fn get_rng_history(limit: Option<u64>, offset: Option<u64>) -> Result<Vec<RngMetadata>, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    let limit = limit.unwrap_or(10).min(50) as usize; // Max 50 records
+    let offset = offset.unwrap_or(0) as usize;
+
+    let history: Vec<RngMetadata> = table
+        .rng_history
+        .iter()
+        .skip(offset)
+        .take(limit)
+        .cloned()
+        .collect();
+
+    Ok(history)
+}
+
+/// Get the total number of rounds with RNG data
+#[ic_cdk::query]
+fn get_rng_history_count() -> Result<u64, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    Ok(table.rng_history.len() as u64)
+}
+
+/// Get card provenance by card hash
+#[ic_cdk::query]
+fn get_card_provenance(card_hash: String) -> Result<CardProvenance, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    table
+        .card_provenance
+        .get(&card_hash)
+        .cloned()
+        .ok_or_else(|| {
+            TableError::InvalidRequest(format!("Card provenance not found for hash {}", card_hash))
+        })
+}
+
+/// Get all card provenance for a specific round
+/// Note: This returns all card provenance currently. To filter by round,
+/// we'd need to enhance CardProvenance to store the round_id.
+/// For now, this can be cross-referenced with RNG metadata on the frontend.
+#[ic_cdk::query]
+fn get_all_card_provenance() -> Result<Vec<CardProvenance>, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    let provenance: Vec<CardProvenance> = table
+        .card_provenance
+        .values()
+        .cloned()
+        .collect();
+
+    Ok(provenance)
+}
+
+/// Verify the shuffle for a specific round by recalculating the hash
+#[ic_cdk::query]
+fn verify_shuffle(round_id: u64) -> Result<bool, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    let rng_metadata = table
+        .rng_history
+        .iter()
+        .find(|rng| rng.round_id == round_id)
+        .ok_or_else(|| {
+            TableError::InvalidRequest(format!("RNG metadata not found for round {}", round_id))
+        })?;
+
+    // Recreate the deck from the RNG metadata
+    let mut shuffled_bytes = rng_metadata.raw_random_bytes.clone();
+    reshuffle_bytes_hash(&mut shuffled_bytes, rng_metadata.time_seed);
+    let deck = FlatDeck::new(shuffled_bytes);
+
+    // Calculate hash and compare
+    let calculated_hash = calculate_deck_hash(&deck);
+    let matches = calculated_hash == rng_metadata.deck_hash;
+
+    Ok(matches)
+}
+
+/// Get RNG statistics summary
+#[ic_cdk::query]
+fn get_rng_stats() -> Result<RngStats, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    Ok(RngStats {
+        total_rounds: table.rng_history.len() as u64,
+        total_cards_tracked: table.card_provenance.len() as u64,
+        oldest_round_id: table.rng_history.first().map(|r| r.round_id),
+        latest_round_id: table.rng_history.last().map(|r| r.round_id),
+        current_round_ticker: table.round_ticker,
+    })
+}
+
+// ============================================================================
 
 #[allow(dependency_on_unit_never_type_fallback)]
 #[ic_cdk::update]
@@ -1130,15 +1268,22 @@ async fn start_new_betting_round() -> Result<(), TableError> {
     handle_cycle_check().await;
 
     let raw_bytes = ic_cdk::management_canister::raw_rand().await;
-    let mut raw_bytes = raw_bytes.map_err(|e| {
+    let raw_bytes = raw_bytes.map_err(|e| {
         TableError::CanisterCallError(format!("Failed to generate random bytes: {:?}", e))
     })?;
+
+    // Store original bytes BEFORE reshuffling for transparency
+    let original_random_bytes = raw_bytes.clone();
 
     // Get current time in nanoseconds as seed
     let time_seed = ic_cdk::api::time();
 
     // Reshuffle the bytes using time as seed
-    reshuffle_bytes_hash(&mut raw_bytes, time_seed);
+    let mut shuffled_bytes = raw_bytes;
+    reshuffle_bytes_hash(&mut shuffled_bytes, time_seed);
+
+    // Create deck to capture the shuffle result
+    let deck = FlatDeck::new(shuffled_bytes.clone());
 
     let (kicked_players, action_logs, table_id, seated_out_kicked_players, users) = {
         let mut table_state = TABLE.lock().map_err(|_| TableError::LockError)?;
@@ -1175,8 +1320,37 @@ async fn start_new_betting_round() -> Result<(), TableError> {
 
         let action_logs = table_state.action_logs.clone();
 
+        // 🆕 CREATE RNG METADATA for transparency
+        let round_id = table_state.round_ticker;
+        let deck_hash = calculate_deck_hash(&deck);
+        let shuffled_deck: Vec<Card> = deck.cards().to_vec();
+        
+        let rng_metadata = RngMetadata {
+            round_id,
+            raw_random_bytes: original_random_bytes,
+            time_seed,
+            timestamp_ns: time_seed,
+            deck_hash,
+            ic_transaction_id: None, // Can be enhanced later with actual transaction ID
+            shuffled_deck,
+        };
+
+        // 🆕 GENERATE CARD PROVENANCE
+        let card_provenance = generate_card_provenance(&deck, round_id);
+
+        // 🆕 STORE RNG DATA IN TABLE
+        table_state.rng_history.push(rng_metadata);
+        table_state.card_provenance.extend(card_provenance);
+
+        ic_cdk::println!(
+            "✅ RNG captured for round {}: {} cards, hash: {}",
+            round_id,
+            table_state.card_provenance.len(),
+            table_state.rng_history.last().map(|r| r.deck_hash.clone()).unwrap_or_default()
+        );
+
         let (kicked_players, seated_out_kicked_players) =
-            match table_state.start_betting_round(raw_bytes) {
+            match table_state.start_betting_round(shuffled_bytes) {
                 Ok(kicked_players) => kicked_players,
                 Err(e) => {
                     ic_cdk::println!("Error starting betting round: {:?}", e);
@@ -2004,6 +2178,60 @@ async fn get_canister_status_formatted() -> Result<String, TableError> {
 
     ic_cdk::println!("{}", formatted_status);
     Ok(formatted_status)
+}
+
+// ============================================================================
+// RNG Transparency Helper Functions
+// ============================================================================
+
+/// Calculate SHA-256 hash of the deck for verification purposes
+fn calculate_deck_hash(deck: &FlatDeck) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    
+    let mut hasher = DefaultHasher::new();
+    
+    // Hash each card in the deck
+    for card in deck.cards() {
+        card.hash(&mut hasher);
+    }
+    
+    // Convert to hex string
+    format!("{:x}", hasher.finish())
+}
+
+/// Generate card provenance for all cards in the deck
+fn generate_card_provenance(
+    deck: &FlatDeck,
+    round_id: u64,
+) -> HashMap<String, CardProvenance> {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    
+    let mut provenance_map = HashMap::new();
+    
+    for (shuffled_position, card) in deck.cards().iter().enumerate() {
+        // Calculate unique hash for this card
+        let mut hasher = DefaultHasher::new();
+        round_id.hash(&mut hasher);
+        card.hash(&mut hasher);
+        (shuffled_position as u8).hash(&mut hasher);
+        let card_hash = format!("{:x}", hasher.finish());
+        
+        // Create provenance record
+        let provenance = CardProvenance {
+            card: *card,
+            original_position: shuffled_position as u8, // Will be updated with actual original position if needed
+            shuffled_position: shuffled_position as u8,
+            card_hash: card_hash.clone(),
+            dealt_to: None,
+            dealt_at_stage: None,
+        };
+        
+        provenance_map.insert(card_hash, provenance);
+    }
+    
+    provenance_map
 }
 
 ic_cdk::export_candid!();

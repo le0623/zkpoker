@@ -512,6 +512,9 @@ impl Default for RngMetadata {
 /// how it ended up in their hand, providing complete transparency.
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 pub struct CardProvenance {
+    /// Round ID this card belongs to
+    pub round_id: u64,
+    
     /// The card (e.g., Ace of Spades)
     pub card: Card,
 
@@ -536,6 +539,7 @@ pub struct CardProvenance {
 impl Default for CardProvenance {
     fn default() -> Self {
         CardProvenance {
+            round_id: 0,
             card: Card::new(crate::poker::core::Value::Two, crate::poker::core::Suit::Spade),
             original_position: 0,
             shuffled_position: 0,

@@ -44,10 +44,11 @@ import { TableScreenTournamentModalButton } from './table-screen-tournament-moda
 import { ChatComponent } from '../../../../components/common/chat/chat.component';
 import { AnimatePresence } from 'framer-motion';
 import { useWording } from '../../../../hooks/wording';
+import { RngDashboard } from '../rng-dashboard/rng-dashboard.component';
 
 const TableScreenDebugModalButton = lazy(() => import('./table-screen-debug-modal.component'));
 
-export const TableScreenInnerComponent = memo(() => {
+export const TableScreenInnerComponent = memo<{ openRngDashboard: (roundId?: bigint) => void }>(({ openRngDashboard }) => {
   const { table, isJoined, user } = useTable();
   const { user: zkpUser } = useUser();
   const [chat, setChat] = useState(false);
@@ -91,7 +92,7 @@ export const TableScreenInnerComponent = memo(() => {
 
       {showHud && (
         <div className="fixed bottom-5 w-full z-41">
-          <HUDComponent />
+          <HUDComponent openRngDashboard={openRngDashboard} />
         </div>
       )}
 
@@ -106,12 +107,13 @@ export const TableScreenInnerComponent = memo(() => {
           />
         </ToggleComponent>
       </div>
+
     </>
   );
 });
 TableScreenInnerComponent.displayName = "TableScreenInnerComponent";
 
-const NavbarItemsComponent = memo(() => {
+const NavbarItemsComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void }>(({ openRngDashboard }) => {
   const [showSettings, setShowSettings] = useState(false);
   const { user: zkpUser } = useUser();
 
@@ -318,6 +320,19 @@ const TableComponentInner = memo<{
 
   const tournament = useTournament();
 
+  const [rngDashboardOpen, setRngDashboardOpen] = useState(false);
+  const [selectedRoundId, setSelectedRoundId] = useState<bigint | undefined>();
+
+  const openRngDashboard = useCallback((roundId?: bigint) => {
+    setSelectedRoundId(roundId);
+    setRngDashboardOpen(true);
+  }, []);
+
+  const closeRngDashboard = useCallback(() => {
+    setRngDashboardOpen(false);
+    setSelectedRoundId(undefined);
+  }, []);
+
   const tableValue = useMemo((): TableContextValue => ({
     currencyType,
     receiver: {
@@ -354,8 +369,8 @@ const TableComponentInner = memo<{
         navbarRightSide={(
           <ProvideTable value={tableValue}>
             {tournament ?
-              <ProvideRawTournamentContext value={tournament}><NavbarItemsComponent /></ProvideRawTournamentContext> :
-              <NavbarItemsComponent />}
+              <ProvideRawTournamentContext value={tournament}><NavbarItemsComponent openRngDashboard={openRngDashboard} /></ProvideRawTournamentContext> :
+              <NavbarItemsComponent openRngDashboard={openRngDashboard} />}
           </ProvideTable>
         )}
         isOverlay
@@ -378,9 +393,16 @@ const TableComponentInner = memo<{
             className={classNames("relative w-screen h-screen z-0 overflow-hidden")}
           >
             {IsDev && <TableScreenDebugModalButton table={table} user={zkpUser} />}
-            <TableScreenInnerComponent />
+            <TableScreenInnerComponent openRngDashboard={openRngDashboard} />
 
             {canSeeRefill && <RefillModal />}
+
+            <RngDashboard
+              isOpen={rngDashboardOpen}
+              onClose={closeRngDashboard}
+              roundId={selectedRoundId}
+              tableActor={actor}
+            />
           </div>
         </TableVisualsContext.Provider>
       </EnvironmentBackgroundComponent>
@@ -406,7 +428,7 @@ export const TableScreenComponent = memo<{ table_principal: Principal }>(
       queryFn: async () => {
         if (!actor) throw new Error(`No valid id found in url`);
         try {
-          const d = await actor.get_table();
+          const d = await actor.get_table();   
           if ("Err" in d) throw d.Err;
           return d.Ok;
         } catch (e) {

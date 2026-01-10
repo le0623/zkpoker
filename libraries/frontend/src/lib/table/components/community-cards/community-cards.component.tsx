@@ -7,6 +7,8 @@ import { Card } from "@declarations/table_canister/table_canister.did";
 
 import { CardComponent } from "../card/card.component";
 import { IsSameCard, IsSameHand } from "../../../utils/compare";
+import { useCardHashes } from "../../hooks/use-card-hash";
+import { useTable } from "../../context/table.context";
 
 const CardIndent = forwardRef<HTMLDivElement, { className?: string }>(
   ({ className }, ref) => (
@@ -25,9 +27,10 @@ type Slot = {
   card?: Card;
   offset: { x: number; y: number; zIndex?: number[] | number };
   index: number;
+  hash?: string | null;
 };
 
-const AnimatedSlot = memo<Slot>(({ card, index, offset }) => {
+const AnimatedSlot = memo<Slot>(({ card, index, offset, hash }) => {
   const { play } = useSound();
   return (
     <motion.div
@@ -49,7 +52,7 @@ const AnimatedSlot = memo<Slot>(({ card, index, offset }) => {
         play("deal-card");
       }}
     >
-      <CardComponent card={card} key={index} />
+      <CardComponent card={card} hash={hash || undefined} key={index} />
     </motion.div>
   );
 },
@@ -58,12 +61,19 @@ const AnimatedSlot = memo<Slot>(({ card, index, offset }) => {
     prevProps.index === nextProps.index &&
     prevProps.offset.x === nextProps.offset.x &&
     prevProps.offset.y === nextProps.offset.y &&
-    prevProps.offset.zIndex === nextProps.offset.zIndex
+    prevProps.offset.zIndex === nextProps.offset.zIndex &&
+    prevProps.hash === nextProps.hash
 );
 AnimatedSlot.displayName = "AnimatedSlot";
 
 export const CommunityCardsComponent = memo<{ community_cards: Card[] }>(
   ({ community_cards }) => {
+    const { table } = useTable();
+    const roundId = table?.round_ticker;
+    
+    // Calculate hashes for community cards
+    const cardHashes = useCardHashes(community_cards, roundId);
+    
     const stackIndent = useRef<HTMLDivElement>(null);
     const hiddenIndent = useRef<HTMLDivElement>(null);
     const slot0Indent = useRef<HTMLDivElement>(null);
@@ -134,6 +144,7 @@ export const CommunityCardsComponent = memo<{ community_cards: Card[] }>(
         playedCards.push({
           ...deck.pop()!,
           card,
+          hash: cardHashes[i] || undefined,
           offset: {
             x: -(stack?.offsetLeft ?? 0) + (indent?.offsetLeft ?? 0),
             y: -(stack?.offsetTop ?? 0) + (indent?.offsetTop ?? 0),
@@ -154,6 +165,7 @@ export const CommunityCardsComponent = memo<{ community_cards: Card[] }>(
     }, [
       stackIndent.current,
       community_cards,
+      cardHashes,
       hiddenIndent.current,
       slot0Indent.current,
       slot1Indent.current,

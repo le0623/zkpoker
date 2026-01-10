@@ -187,6 +187,9 @@ impl Table {
                 self.pot = Pot(0);
                 self.side_pots.clear();
 
+                // 🔓 REVEAL DECK: Game has ended, reveal the full deck for transparency
+                self.reveal_deck_for_current_round();
+
                 #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
                 self.start_next_turn_timer(self.config.auto_start_timer.into());
                 return Ok(());
@@ -221,6 +224,9 @@ impl Table {
             .map_err(|e| trace_err!(e, "Failed to set sorted users."))?;
         self.pot = Pot(0);
         self.side_pots.clear();
+
+        // 🔓 REVEAL DECK: Game has ended, reveal the full deck for transparency
+        self.reveal_deck_for_current_round();
 
         #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
         self.start_next_turn_timer(self.config.auto_start_timer.into());

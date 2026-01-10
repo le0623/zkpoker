@@ -8,6 +8,7 @@ import { Card } from '@declarations/table_canister/table_canister.did';
 import { useTableVisuals } from '../../context/table-visuals.context';
 import { IsSameCard } from '../../../utils/compare';
 import isEqual from 'lodash/isEqual';
+import { CardHashBadge } from './card-hash-badge.component';
 
 const SuitsMapping: Record<string, { symbol: string; className: string }> = {
   Spade: { symbol: "♠", className: "text-black" },
@@ -43,6 +44,7 @@ type Props = {
   | "large";
   floating?: boolean;
   style?: CSSProperties;
+  hash?: string; // Optional card hash for transparency
 };
 
 const FlipDuration = 0.2;
@@ -175,7 +177,7 @@ const ActualCard = memo<Pick<Props, "floating" | "card" | "size">>(
 ActualCard.displayName = "ActualCard";
 
 export const CardComponent = memo<Props>(
-  ({ className, style, size = "small", ...props }) => {
+  ({ className, style, size = "small", hash, ...props }) => {
     return (
       <div
         className={classNames("aspect-card", className, {
@@ -199,6 +201,7 @@ export const CardComponent = memo<Props>(
     prevProps.size === nextProps.size &&
     prevProps.floating === nextProps.floating &&
     prevProps.className === nextProps.className &&
+    prevProps.hash === nextProps.hash &&
     isEqual(prevProps.style, nextProps.style) &&
     IsSameCard(prevProps.card, nextProps.card)
 );

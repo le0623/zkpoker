@@ -972,4 +972,28 @@ impl Table {
             }
         }
     }
+
+    /// Reveal the full shuffled deck for the current round (after game ends)
+    /// 
+    /// This is part of the commit-reveal scheme for provably fair RNG:
+    /// 1. Commit phase: Deck hash is stored, but deck remains hidden
+    /// 2. Reveal phase: After game ends, the full deck is revealed for verification
+    ///    
+    pub fn reveal_deck_for_current_round(&mut self) {
+        // Get the current round's RNG metadata
+        if let Some(last_rng) = self.rng_history.last_mut() {
+            // Only reveal if deck is still hidden (empty)
+            if last_rng.shuffled_deck.is_empty() {
+                // Reveal the full deck
+                last_rng.shuffled_deck = self.deck.cards().to_vec();
+                
+                #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+                ic_cdk::println!(
+                    "🔓 Deck revealed for round {}: {} cards",
+                    last_rng.round_id,
+                    last_rng.shuffled_deck.len()
+                );
+            }
+        }
+    }
 }

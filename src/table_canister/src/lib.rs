@@ -17,7 +17,7 @@ use intercanister_call_wrappers::{
 use lazy_static::lazy_static;
 use table::{
     poker::{
-        core::{Card, FlatDeck, Rank},
+        core::{Card, FlatDeck, Rank, Value, Suit},
         game::{
             table_functions::{
                 action_log::ActionType,
@@ -147,14 +147,28 @@ fn get_rng_metadata(round_id: u64) -> Result<RngMetadata, TableError> {
     let table = TABLE.lock().map_err(|_| TableError::LockError)?;
     let table = table.as_ref().ok_or(TableError::TableNotFound)?;
 
-    table
+    let mut rng_metadata = table
         .rng_history
         .iter()
         .find(|rng| rng.round_id == round_id)
         .cloned()
         .ok_or_else(|| {
             TableError::InvalidRequest(format!("RNG metadata not found for round {}", round_id))
-        })
+        })?;
+
+    // 🔒 SECURITY: Hide time_seed during gameplay to prevent deck reconstruction
+    // Only reveal after game ends for verification
+    let game_ended = table.sorted_users.is_some();
+    
+    if !game_ended {
+        rng_metadata.time_seed = 0;           // Hide - allows deck reconstruction
+        rng_metadata.timestamp_ns = 0;        // Hide - same as time_seed
+        // ✅ Keep deck_hash - commitment proof
+        // ✅ Keep raw_random_bytes - proves IC VRF randomness
+        // ✅ shuffled_deck already empty during game
+    }
+
+    Ok(rng_metadata)
 }
 
 /// Get RNG metadata for the current round
@@ -163,11 +177,25 @@ fn get_current_rng_metadata() -> Result<RngMetadata, TableError> {
     let table = TABLE.lock().map_err(|_| TableError::LockError)?;
     let table = table.as_ref().ok_or(TableError::TableNotFound)?;
 
-    table
+    let mut rng_metadata = table
         .rng_history
         .last()
         .cloned()
-        .ok_or_else(|| TableError::InvalidRequest("No RNG history available".to_string()))
+        .ok_or_else(|| TableError::InvalidRequest("No RNG history available".to_string()))?;
+
+    // 🔒 SECURITY: Hide time_seed during gameplay to prevent deck reconstruction
+    // Only reveal after game ends for verification
+    let game_ended = table.sorted_users.is_some();
+    
+    if !game_ended {
+        rng_metadata.time_seed = 0;           // Hide - allows deck reconstruction
+        rng_metadata.timestamp_ns = 0;        // Hide - same as time_seed
+        // ✅ Keep deck_hash - commitment proof
+        // ✅ Keep raw_random_bytes - proves IC VRF randomness
+        // ✅ shuffled_deck already empty during game
+    }
+
+    Ok(rng_metadata)
 }
 
 /// Get all RNG history (paginated to avoid large responses)
@@ -179,12 +207,24 @@ fn get_rng_history(limit: Option<u64>, offset: Option<u64>) -> Result<Vec<RngMet
     let limit = limit.unwrap_or(10).min(50) as usize; // Max 50 records
     let offset = offset.unwrap_or(0) as usize;
 
+    // 🔒 SECURITY: Hide time_seed for current round if game is ongoing
+    let game_ended = table.sorted_users.is_some();
+    let current_round = table.round_ticker;
+
     let history: Vec<RngMetadata> = table
         .rng_history
         .iter()
         .skip(offset)
         .take(limit)
-        .cloned()
+        .map(|rng| {
+            let mut rng_clone = rng.clone();
+            // Hide time_seed only for current ongoing round
+            if !game_ended && rng.round_id == current_round {
+                rng_clone.time_seed = 0;
+                rng_clone.timestamp_ns = 0;
+            }
+            rng_clone
+        })
         .collect();
 
     Ok(history)
@@ -205,28 +245,102 @@ fn get_card_provenance(card_hash: String) -> Result<CardProvenance, TableError> 
     let table = TABLE.lock().map_err(|_| TableError::LockError)?;
     let table = table.as_ref().ok_or(TableError::TableNotFound)?;
 
-    table
+    let provenance = table
         .card_provenance
         .get(&card_hash)
         .cloned()
         .ok_or_else(|| {
             TableError::InvalidRequest(format!("Card provenance not found for hash {}", card_hash))
+        })?;
+
+    // 🔒 SECURITY: Hide card value during gameplay
+    let game_ended = table.sorted_users.is_some();
+    
+    if !game_ended {
+        // During gameplay: return ONLY hash and position
+        // Hide the actual card value to prevent cheating
+        let dummy_card = Card {
+            value: Value::Two,
+            suit: Suit::Spade,
+        };
+        
+        Ok(CardProvenance {
+            round_id: provenance.round_id,
+            card: dummy_card,
+            original_position: provenance.original_position,
+            shuffled_position: provenance.shuffled_position,
+            card_hash: provenance.card_hash,
+            dealt_to: provenance.dealt_to,
+            dealt_at_stage: provenance.dealt_at_stage,
         })
+    } else {
+        // After game: reveal actual card
+        Ok(provenance)
+    }
 }
 
-/// Get all card provenance for a specific round
-/// Note: This returns all card provenance currently. To filter by round,
-/// we'd need to enhance CardProvenance to store the round_id.
-/// For now, this can be cross-referenced with RNG metadata on the frontend.
+/// Get all card provenance for the current round
+/// Players can only see their own cards and community cards during gameplay
 #[ic_cdk::query]
 fn get_all_card_provenance() -> Result<Vec<CardProvenance>, TableError> {
     let table = TABLE.lock().map_err(|_| TableError::LockError)?;
     let table = table.as_ref().ok_or(TableError::TableNotFound)?;
 
+    let current_round = table.round_ticker;
+    let caller = WalletPrincipalId(ic_cdk::api::msg_caller());
+    
+    // 🔒 SECURITY: Check if game has ended
+    let game_ended = table.sorted_users.is_some();
+    
+    // Get caller's cards (if they're playing)
+    let caller_cards: Vec<Card> = table
+        .user_table_data
+        .get(&caller)
+        .map(|user_data| user_data.cards.clone())
+        .unwrap_or_default();
+    
+    // Get community cards
+    let community_cards = table.community_cards.clone();
+
     let provenance: Vec<CardProvenance> = table
         .card_provenance
         .values()
-        .cloned()
+        .filter(|prov| prov.round_id == current_round)
+        .map(|prov| {
+            if game_ended {
+                // After game: reveal all cards
+                return prov.clone();
+            }
+            
+            // During gameplay: check if this card should be visible to caller
+            let card_matches = |c1: &Card, c2: &Card| -> bool {
+                format!("{:?}:{:?}", c1.value, c1.suit) == format!("{:?}:{:?}", c2.value, c2.suit)
+            };
+            
+            let is_callers_card = caller_cards.iter().any(|c| card_matches(c, &prov.card));
+            let is_community_card = community_cards.iter().any(|c| card_matches(c, &prov.card));
+            
+            if is_callers_card || is_community_card {
+                // Reveal this card (it's theirs or community)
+                prov.clone()
+            } else {
+                // Hide this card (belongs to another player or not dealt yet)
+                let dummy_card = Card {
+                    value: Value::Two,
+                    suit: Suit::Spade,
+                };
+                
+                CardProvenance {
+                    round_id: prov.round_id,
+                    card: dummy_card,
+                    original_position: prov.original_position,
+                    shuffled_position: prov.shuffled_position,
+                    card_hash: prov.card_hash.clone(),
+                    dealt_to: prov.dealt_to.clone(),
+                    dealt_at_stage: prov.dealt_at_stage.clone(),
+                }
+            }
+        })
         .collect();
 
     Ok(provenance)
@@ -1323,8 +1437,9 @@ async fn start_new_betting_round() -> Result<(), TableError> {
         // 🆕 CREATE RNG METADATA for transparency
         let round_id = table_state.round_ticker;
         let deck_hash = calculate_deck_hash(&deck);
-        let shuffled_deck: Vec<Card> = deck.cards().to_vec();
         
+        // 🔒 SECURITY: Store empty shuffled_deck initially (commit phase)
+        // Full deck will be revealed only after the game ends (reveal phase)
         let rng_metadata = RngMetadata {
             round_id,
             raw_random_bytes: original_random_bytes,
@@ -1332,7 +1447,7 @@ async fn start_new_betting_round() -> Result<(), TableError> {
             timestamp_ns: time_seed,
             deck_hash,
             ic_transaction_id: None, // Can be enhanced later with actual transaction ID
-            shuffled_deck,
+            shuffled_deck: Vec::new(), // ✅ Empty until game ends
         };
 
         // 🆕 GENERATE CARD PROVENANCE
@@ -2184,44 +2299,62 @@ async fn get_canister_status_formatted() -> Result<String, TableError> {
 // RNG Transparency Helper Functions
 // ============================================================================
 
-/// Calculate SHA-256 hash of the deck for verification purposes
+/// Calculate SHA-256 hash of the deck for cryptographic verification
+/// 
+/// Uses SHA-256 for cryptographic security and transparency.
+/// This ensures hashes can be independently verified by users.
 fn calculate_deck_hash(deck: &FlatDeck) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use sha2::{Sha256, Digest};
     
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = Sha256::new();
     
-    // Hash each card in the deck
+    // Hash each card in the deck deterministically
     for card in deck.cards() {
-        card.hash(&mut hasher);
+        // Serialize card as value:suit bytes
+        let card_bytes = format!("{:?}:{:?}", card.value, card.suit);
+        hasher.update(card_bytes.as_bytes());
     }
     
-    // Convert to hex string
-    format!("{:x}", hasher.finish())
+    // Convert to hex string (64 chars for SHA-256)
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }
 
 /// Generate card provenance for all cards in the deck
+/// 
+/// Uses SHA-256 for each card hash to ensure cryptographic verification.
+/// Hash format: SHA-256(round_id || card || shuffled_position)
 fn generate_card_provenance(
     deck: &FlatDeck,
     round_id: u64,
 ) -> HashMap<String, CardProvenance> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use sha2::{Sha256, Digest};
     
     let mut provenance_map = HashMap::new();
     
     for (shuffled_position, card) in deck.cards().iter().enumerate() {
-        // Calculate unique hash for this card
-        let mut hasher = DefaultHasher::new();
-        round_id.hash(&mut hasher);
-        card.hash(&mut hasher);
-        (shuffled_position as u8).hash(&mut hasher);
-        let card_hash = format!("{:x}", hasher.finish());
+        // Calculate unique SHA-256 hash for this card
+        let mut hasher = Sha256::new();
+        
+        // Hash round_id (8 bytes, little-endian)
+        hasher.update(round_id.to_le_bytes());
+        
+        // Hash card (deterministic serialization)
+        let card_bytes = format!("{:?}:{:?}", card.value, card.suit);
+        hasher.update(card_bytes.as_bytes());
+        
+        // Hash position (1 byte)
+        hasher.update(&[shuffled_position as u8]);
+        
+        // Finalize to hex string
+        let result = hasher.finalize();
+        let card_hash = format!("{:x}", result);
         
         // Create provenance record
         let provenance = CardProvenance {
+            round_id,
             card: *card,
-            original_position: shuffled_position as u8, // Will be updated with actual original position if needed
+            original_position: shuffled_position as u8,
             shuffled_position: shuffled_position as u8,
             card_hash: card_hash.clone(),
             dealt_to: None,

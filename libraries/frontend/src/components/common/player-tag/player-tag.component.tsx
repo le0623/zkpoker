@@ -9,6 +9,7 @@ import { User } from '@declarations/users_index/users_index.did';
 import { CardComponent } from '@lib/table/components/card/card.component';
 import { useTableUIContext } from '@lib/table/context/table-ui.context';
 import { useTable } from '@lib/table/context/table.context';
+import { useCardHashes } from '@lib/table/hooks/use-card-hash';
 import { AvatarComponent } from '@lib/ui/avatar/avatar.component';
 import { CurrencyComponent, IsSameCurrencyType } from '@zk-game-dao/currency';
 import { Interactable, ScreenAvoidingElement, UnwrapOptional } from '@zk-game-dao/ui';
@@ -130,6 +131,11 @@ export const PlayerTag = memo<PlayerTagProps>(
   }) => {
     const [playerAction, setPlayerAction] = useState(player_action);
     const { animatePots } = useTableUIContext();
+    const { table } = useTable();
+    const roundId = table?.round_ticker;
+    
+    // Calculate hashes for visible cards (only for isSelf cards)
+    const cardHashes = useCardHashes(isSelf && cards ? cards : [], roundId);
 
     useEffect(() => {
       if (!player_action) return;
@@ -183,6 +189,7 @@ export const PlayerTag = memo<PlayerTagProps>(
                     <CardComponent
                       key={index}
                       card={card}
+                      hash={isSelf && cardHashes[index] ? cardHashes[index]! : undefined}
                       size={
                         !isSelf
                           ? "microscopic"

@@ -139,7 +139,7 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(({ raise, currencyTy
 });
 HUDInputRow.displayName = 'HUDInputRow';
 
-export const HUDComponent = memo(() => {
+export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void }>(({ openRngDashboard }) => {
   const { isOngoing, table, isJoined, userIndex, user } = useTable();
   const { user: zkpUser } = useUser();
 
@@ -325,7 +325,21 @@ export const HUDComponent = memo(() => {
                               </>
                             )}
 
-                            {(!sitout.isSittingOut || (autoCheckFold && !isOngoing) || (!autoCheckFold && isOngoing)) && <HudSeperator desktopOnly />}
+                            {/* RNG Transparency Button */}
+                            {openRngDashboard && (
+                              <WeirdKnobComponent
+                                mutate={() => openRngDashboard()}
+                                isPending={false}
+                                variant="transparent"
+                              >
+                                🎲 RNG
+                              </WeirdKnobComponent>
+                            )}
+
+                            {/* Show separator if there are any buttons before play buttons */}
+                            {((!sitout.isSittingOut && autoCheckFold && isOngoing) || 
+                              (isOngoing && !sitout.isSittingOut) || 
+                              openRngDashboard) && <HudSeperator desktopOnly />}
                           </>
                         )}
 

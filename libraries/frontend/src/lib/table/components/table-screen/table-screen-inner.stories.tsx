@@ -191,7 +191,7 @@ const meta: Meta<TableStories> = {
             user: isJoined ? users[0].cumulative : undefined,
           })}
         >
-          <TableScreenInnerComponent />
+          <TableScreenInnerComponent openRngDashboard={() => {}} />
         </ProvideTable>
       </RawUserContextProvider>
     );

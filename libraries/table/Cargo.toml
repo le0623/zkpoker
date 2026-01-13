@@ -21,6 +21,8 @@ errors = { path = "../errors" }
 macros = { path = "../macros" }
 user = { path = "../../libraries/user" }
 currency = { git = "https://github.com/trustedpoker/currency.git", branch = "main" }
+rand = { version = "0.8", default-features = false }
+rand_chacha = "0.3"
 
 [features]
 default = []

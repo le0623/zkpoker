@@ -174,8 +174,6 @@ export function RngDeckPanel({
     position: number;
     provenance: CardProvenance;
   }) => {
-    // After game ends, all cards are revealed by backend, so don't check isDummyCard
-    // During gameplay, check isDummyCard to filter out hidden cards
     const isRevealed = gameFinished
       ? revealedCards.has(position)
       : revealedCards.has(position) && !isDummyCard(provenance.card);
@@ -317,14 +315,15 @@ export function RngDeckPanel({
         {allCardsRevealed ? (
           <p className="info-hint">
             ✅ Game ended. All cards are now visible. Click any card to toggle
-            between front/back view and verify its hash. On first click, the
-            hash is calculated and a verification badge (✓/✗) appears.
+            between front/back view. Use "Verify Hash" button to independently
+            verify each card's cryptographic hash.
           </p>
         ) : (
           <p className="info-hint">
             🔒 During gameplay: You can see your hole cards and community cards.
             All 52 card hashes are visible. Other cards show as face-down with
-            their hash. Click revealed cards to verify their hash integrity.
+            their hash. Click "Verify Hash" on revealed cards to check their
+            integrity.
           </p>
         )}
       </div>
@@ -356,16 +355,15 @@ export function RngDeckPanel({
           {allCardsRevealed ? (
             <>
               <strong>✅ Full Transparency:</strong> All 52 cards are visible.
-              Click any card to toggle between front and back, and verify its
-              hash. A verification badge (✓/✗) shows if the hash matches.
+              Click any card to flip between front and back. Verify hashes to
+              ensure deck integrity.
             </>
           ) : (
             <>
               <strong>🔒 Partial Visibility:</strong> You can see{" "}
               {revealedCount} cards (your hole cards + community cards). All
               hashes are visible for verification. Full deck revealed after game
-              ends. Card badges: <strong>H</strong> = Hole cards,{" "}
-              <strong>C</strong> = Community cards.
+              ends.
             </>
           )}
         </p>
@@ -373,11 +371,10 @@ export function RngDeckPanel({
         {allCardsRevealed && (
           <div className="verification-reminder">
             <p className="info-hint">
-              <strong>🔍 Verification:</strong> Click any revealed card to
-              calculate its hash from the card value, suit, position, and round
-              ID. A ✓ badge means the hash matches (deck integrity confirmed).
-              Click again to toggle between the calculated hash and the original
-              hash.
+              <strong>🔍 Verification:</strong> Click "Verify Hash" on any card
+              to independently calculate its hash from the card value, suit,
+              position, and round ID. A ✓ badge means the hash matches (deck
+              integrity confirmed).
             </p>
           </div>
         )}

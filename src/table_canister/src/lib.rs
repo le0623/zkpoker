@@ -394,9 +394,6 @@ fn get_all_card_provenance(limit: Option<u64>) -> Result<Vec<CardProvenance>, Ta
 }
 
 /// Verify the shuffle for a specific round by recalculating the hash
-///
-/// 🔒 SECURITY: Verification is only allowed after the game ends to prevent
-/// time_seed exposure during gameplay, which would allow deck reconstruction.
 #[ic_cdk::query]
 fn verify_shuffle(round_id: u64) -> Result<bool, TableError> {
     let table = TABLE.lock().map_err(|_| TableError::LockError)?;
@@ -409,17 +406,6 @@ fn verify_shuffle(round_id: u64) -> Result<bool, TableError> {
         .ok_or_else(|| {
             TableError::InvalidRequest(format!("RNG metadata not found for round {}", round_id))
         })?;
-
-    // 🔒 SECURITY: Check if game has ended before allowing verification
-    // This prevents time_seed exposure during gameplay
-    let game_ended = table.sorted_users.is_some();
-    let is_current_round = rng_metadata.round_id == table.round_ticker;
-
-    if !game_ended && is_current_round {
-        return Err(TableError::InvalidRequest(
-            "Verification is only available after the game ends".to_string(),
-        ));
-    }
 
     // Recreate the deck from the RNG metadata
     let mut shuffled_bytes = rng_metadata.raw_random_bytes.clone();

@@ -31,16 +31,23 @@ impl FlatDeck {
         &self.cards
     }
 
-    /// Randomly shuffle the flat deck.
-    /// This will ensure the there's no order to the deck.
+    /// Randomly shuffle the flat deck using Fisher-Yates algorithm.
+    ///
+    /// This implements the correct Fisher-Yates shuffle which ensures uniform distribution.
+    /// For each position i, we pick a random card from the remaining unshuffled portion [i, n).
     pub fn shuffle(&mut self, rand_bytes: Vec<u8>) {
-        // Perform the Fisher-Yates shuffle using the random bytes
-        let mut n = self.cards.len();
-        for i in 0..n - 1 {
-            let rand_index = (rand_bytes[i % rand_bytes.len()] as usize) % n;
-            self.cards.swap(i, rand_index);
-            // Adjust n to prevent the same bytes from influencing too many swaps
-            n = n.saturating_sub(1);
+        let n = self.cards.len();
+
+        // Fisher-Yates shuffle: for each position i, swap with a random position j where i <= j < n
+        for i in 0..n.saturating_sub(1) {
+            // Calculate random index in the range [i, n)
+            // This ensures we only pick from the unshuffled portion
+            let remaining = n - i;
+            let rand_offset = (rand_bytes[i % rand_bytes.len()] as usize) % remaining;
+            let j = i + rand_offset;
+
+            // Swap current position with randomly selected position
+            self.cards.swap(i, j);
         }
     }
 

@@ -174,8 +174,11 @@ export function RngDeckPanel({
     position: number;
     provenance: CardProvenance;
   }) => {
-    const isRevealed =
-      revealedCards.has(position) && !isDummyCard(provenance.card);
+    // After game ends, all cards are revealed by backend, so don't check isDummyCard
+    // During gameplay, check isDummyCard to filter out hidden cards
+    const isRevealed = gameFinished
+      ? revealedCards.has(position)
+      : revealedCards.has(position) && !isDummyCard(provenance.card);
     const isFlipped = flippedCards.has(position);
     const hashVerified = verifiedHashes.get(position);
     const isHoleCard = holeCardPositions.has(position);

@@ -10,329 +10,402 @@ import { CardComponent } from "../card/card.component";
 interface RngDeckPanelProps {
   rngData: RngMetadata;
   tableActor: _SERVICE;
+  roundId?: bigint;
 }
 
-export function RngDeckPanel({ rngData, tableActor }: RngDeckPanelProps) {
+export function RngDeckPanel({
+  rngData,
+  tableActor,
+  roundId,
+}: RngDeckPanelProps) {
   const { table, user } = useTable();
   const { user: zkpUser } = useUser();
-  const [cardHashes, setCardHashes] = useState<Map<number, string>>(new Map());
-  const [loadingHashes, setLoadingHashes] = useState(true);
 
-  // Fetch card hashes for all 52 cards
-  useEffect(() => {
-    async function loadCardHashes() {
-      setLoadingHashes(true);
-      try {
-        // 🔒 SECURITY: If shuffled_deck is empty, the game is still ongoing
-        // We'll fetch card hashes from the backend's card_provenance instead
-        if (rngData.shuffled_deck.length === 0) {
-          // Game is ongoing - fetch card provenance for hashes
-          const provenanceResult = await tableActor.get_all_card_provenance();
-          console.log("provenanceResult", provenanceResult);
-          if ("Ok" in provenanceResult) {
-            const hashes = new Map<number, string>();
-            provenanceResult.Ok.forEach((prov) => {
-              hashes.set(prov.shuffled_position, prov.card_hash);
-            });
-            setCardHashes(hashes);
-          }
-        } else {
-          // Game has ended - calculate hashes from revealed deck
-          const hashes = new Map<number, string>();
-          const hashPromises = rngData.shuffled_deck.map((card, position) =>
-            calculateCardHash(card, rngData.round_id, position).then(
-              (hash) => ({
-                position,
-                hash,
-              })
-            )
-          );
-          const results = await Promise.all(hashPromises);
-          results.forEach(({ position, hash }) => {
-            hashes.set(position, hash);
-          });
-          setCardHashes(hashes);
-        }
-      } catch (err) {
-        console.error("Failed to calculate card hashes:", err);
-      } finally {
-        setLoadingHashes(false);
-      }
-    }
-
-    if (rngData) {
-      loadCardHashes();
-    }
-  }, [rngData.round_id, rngData.shuffled_deck.length, tableActor]);
+  // New state management as per plan
+  const [cardProvenance, setCardProvenance] = useState<
+    Map<number, CardProvenance>
+  >(new Map());
+  const [flippedCards, setFlippedCards] = useState<Set<number>>(new Set());
+  const [verifiedHashes, setVerifiedHashes] = useState<Map<number, boolean>>(
+    new Map()
+  );
+  const [calculatedHashes, setCalculatedHashes] = useState<Map<number, string>>(
+    new Map()
+  );
+  const [verifyingCard, setVerifyingCard] = useState<number | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Check if game has finished
   const gameFinished = useMemo(() => {
     if (!table) return false;
-    // Game is finished if there are winners (sorted_users has entries)
     const firstSortedUsers = table.sorted_users?.[0];
     const hasWinners =
       firstSortedUsers !== undefined && firstSortedUsers.length > 0;
     return hasWinners;
   }, [table]);
 
-  // Check if we're in Showdown (all active player cards should be revealed)
-  const isShowdown = useMemo(() => {
-    if (!table) return false;
-    return "Showdown" in table.deal_stage;
-  }, [table]);
-
-  // Get revealed cards during gameplay
-  const revealedCards = useMemo(() => {
-    // 🔒 SECURITY: If deck is empty (game ongoing) or game finished, return empty
-    if (!table || gameFinished || rngData.shuffled_deck.length === 0) return [];
-
-    const revealed: {
-      card: Card;
-      position: number;
-      type: "hole" | "community";
-    }[] = [];
-    const usedPositions = new Set<number>();
-
-    // Helper to find card position in shuffled deck (avoid duplicates)
-    const findCardPosition = (card: Card, startFrom = 0): number => {
-      for (let i = startFrom; i < rngData.shuffled_deck.length; i++) {
-        if (usedPositions.has(i)) continue;
-        const deckCard = rngData.shuffled_deck[i];
-        if (
-          Object.keys(deckCard.value)[0] === Object.keys(card.value)[0] &&
-          Object.keys(deckCard.suit)[0] === Object.keys(card.suit)[0]
-        ) {
-          return i;
-        }
-      }
-      return -1;
-    };
-
-    // Add user's hole cards (if they're in the game)
-    if (user?.data?.cards && zkpUser) {
-      user.data.cards.forEach((card) => {
-        const position = findCardPosition(card);
-        if (position >= 0) {
-          usedPositions.add(position);
-          revealed.push({ card, position, type: "hole" });
-        }
-      });
-    }
-
-    // In Showdown, add all active players' hole cards
-    if (isShowdown && table.user_table_data) {
-      table.user_table_data.forEach(([principal, userData]) => {
-        // Skip if it's the current user (already added above)
-        if (zkpUser && principal.compareTo(zkpUser.principal_id) === "eq")
-          return;
-
-        // Skip folded or sitting out players
-        if (
-          "Folded" in userData.player_action ||
-          "SittingOut" in userData.player_action
-        )
-          return;
-
-        // Add their cards if available
-        if (userData.cards) {
-          userData.cards.forEach((card) => {
-            const position = findCardPosition(card);
-            if (position >= 0) {
-              usedPositions.add(position);
-              revealed.push({ card, position, type: "hole" });
-            }
+  // Fetch card provenance using the new API
+  useEffect(() => {
+    async function loadCardProvenance() {
+      setLoading(true);
+      try {
+        // Use get_card_provenance_by_round_id (None = current round)
+        const result = await tableActor.get_card_provenance_by_round_id(
+          roundId ? [roundId] : []
+        );
+        if ("Ok" in result) {
+          const provenanceMap = new Map<number, CardProvenance>();
+          result.Ok.forEach((prov) => {
+            provenanceMap.set(prov.shuffled_position, prov);
           });
+          setCardProvenance(provenanceMap);
         }
+      } catch (err) {
+        console.error("Failed to load card provenance:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCardProvenance();
+  }, [roundId, tableActor, rngData.round_id]);
+
+  // Card matching helper
+  const cardMatches = (c1: Card, c2: Card): boolean => {
+    const c1Value = Object.keys(c1.value)[0];
+    const c1Suit = Object.keys(c1.suit)[0];
+    const c2Value = Object.keys(c2.value)[0];
+    const c2Suit = Object.keys(c2.suit)[0];
+    return c1Value === c2Value && c1Suit === c2Suit;
+  };
+
+  // Get revealed cards with game sync (plan section 2.3)
+  const revealedCards = useMemo(() => {
+    const revealed = new Set<number>();
+
+    // 1. User's hole cards (always visible)
+    if (user?.data?.cards) {
+      user.data.cards.forEach((card) => {
+        const prov = Array.from(cardProvenance.values()).find(
+          (p) => p.round_id === rngData.round_id && cardMatches(p.card, card)
+        );
+        if (prov) revealed.add(prov.shuffled_position);
       });
     }
 
-    // Add community cards
-    if (table.community_cards) {
+    // 2. Community cards (sync with table state AND deal stage)
+    if (table?.community_cards) {
       table.community_cards.forEach((card) => {
-        const position = findCardPosition(card);
-        if (position >= 0) {
-          usedPositions.add(position);
-          revealed.push({ card, position, type: "community" });
-        }
+        const prov = Array.from(cardProvenance.values()).find(
+          (p) => p.round_id === rngData.round_id && cardMatches(p.card, card)
+        );
+        if (prov) revealed.add(prov.shuffled_position);
       });
+    }
+
+    // 3. Double-check with deal_stage for robustness
+    if (table?.deal_stage) {
+      const stage = Object.keys(table.deal_stage)[0];
+      // PreFlop: 0, Flop: 3, Turn: 4, River: 5
+      const expectedCount =
+        stage === "PreFlop"
+          ? 0
+          : stage === "Flop"
+            ? 3
+            : stage === "Turn"
+              ? 4
+              : stage === "River"
+                ? 5
+                : 0;
+
+      // Validate sync
+      if (table.community_cards.length !== expectedCount) {
+        console.warn("Community cards out of sync with deal stage!");
+      }
+    }
+
+    // 4. After game ends, reveal all
+    if (gameFinished) {
+      Array.from(cardProvenance.keys()).forEach((pos) => revealed.add(pos));
     }
 
     return revealed;
-  }, [table, user, zkpUser, rngData.shuffled_deck, gameFinished, isShowdown]);
+  }, [user, table, cardProvenance, gameFinished, rngData.round_id]);
 
-  // Function to check if a card at position is revealed
-  const isCardRevealed = (
-    position: number
-  ): { revealed: boolean; type?: "hole" | "community" } => {
-    if (gameFinished) {
-      return { revealed: true }; // All cards revealed after game
+  // Identify card types (hole cards, community cards)
+  const holeCardPositions = useMemo(() => {
+    const positions = new Set<number>();
+    if (user?.data?.cards) {
+      user.data.cards.forEach((card) => {
+        const prov = Array.from(cardProvenance.values()).find(
+          (p) => p.round_id === rngData.round_id && cardMatches(p.card, card)
+        );
+        if (prov) positions.add(prov.shuffled_position);
+      });
     }
-    const revealed = revealedCards.find((r) => r.position === position);
-    return revealed
-      ? { revealed: true, type: revealed.type }
-      : { revealed: false };
+    return positions;
+  }, [user, cardProvenance, rngData.round_id]);
+
+  const communityCardPositions = useMemo(() => {
+    const positions = new Set<number>();
+    if (table?.community_cards) {
+      table.community_cards.forEach((card) => {
+        const prov = Array.from(cardProvenance.values()).find(
+          (p) => p.round_id === rngData.round_id && cardMatches(p.card, card)
+        );
+        if (prov) positions.add(prov.shuffled_position);
+      });
+    }
+    return positions;
+  }, [table, cardProvenance, rngData.round_id]);
+
+  // Check if a card is dummy (Two of Spades = hidden)
+  const isDummyCard = (card: Card): boolean => {
+    const valueKey = Object.keys(card.value)[0];
+    const suitKey = Object.keys(card.suit)[0];
+    return valueKey === "Two" && suitKey === "Spade";
   };
 
-  const allCardsRevealed = gameFinished && rngData.shuffled_deck.length > 0;
-  const deckIsHidden = rngData.shuffled_deck.length === 0;
+  // Identify burned cards: revealed cards that are NOT hole cards and NOT community cards
+  const burnedCardPositions = useMemo(() => {
+    const positions = new Set<number>();
+    if (gameFinished) {
+      // After game ends, all cards are revealed
+      // Burned cards are revealed cards that are not hole cards and not community cards
+      Array.from(cardProvenance.values()).forEach((prov) => {
+        if (
+          prov.round_id === rngData.round_id &&
+          !isDummyCard(prov.card) &&
+          !holeCardPositions.has(prov.shuffled_position) &&
+          !communityCardPositions.has(prov.shuffled_position)
+        ) {
+          positions.add(prov.shuffled_position);
+        }
+      });
+    }
+    return positions;
+  }, [
+    cardProvenance,
+    gameFinished,
+    holeCardPositions,
+    communityCardPositions,
+    rngData.round_id,
+  ]);
+
+  // Interactive card component (plan section 2.4)
+  const CardItem = ({
+    position,
+    provenance,
+  }: {
+    position: number;
+    provenance: CardProvenance;
+  }) => {
+    const isRevealed =
+      revealedCards.has(position) && !isDummyCard(provenance.card);
+    const isFlipped = flippedCards.has(position);
+    const hashVerified = verifiedHashes.get(position);
+    const isHoleCard = holeCardPositions.has(position);
+    const isCommunityCard = communityCardPositions.has(position);
+    const isBurnedCard = burnedCardPositions.has(position);
+
+    const handleCardClick = async () => {
+      if (!isRevealed) return; // Only clickable when revealed
+
+      const hasBeenVerified = calculatedHashes.has(position);
+
+      // If card hasn't been verified yet, calculate hash on first click
+      if (!hasBeenVerified && !isFlipped) {
+        setVerifyingCard(position);
+        try {
+          // Calculate hash from visible card data
+          const calculatedHash = await calculateCardHash(
+            provenance.card,
+            rngData.round_id,
+            position
+          );
+
+          // Store the calculated hash and comparison result
+          setCalculatedHashes((prev) =>
+            new Map(prev).set(position, calculatedHash)
+          );
+          const matches = calculatedHash === provenance.card_hash;
+          setVerifiedHashes((prev) => new Map(prev).set(position, matches));
+        } catch (err) {
+          console.error("Hash verification failed:", err);
+          setVerifiedHashes((prev) => new Map(prev).set(position, false));
+        } finally {
+          setVerifyingCard(null);
+        }
+        return; // Don't toggle on first verification
+      }
+
+      // Toggle between verified front and card back
+      setFlippedCards((prev) => {
+        const next = new Set(prev);
+        if (next.has(position)) {
+          next.delete(position);
+        } else {
+          next.add(position);
+        }
+        return next;
+      });
+    };
+
+    return (
+      <div
+        className={`card-item-wrapper ${isRevealed ? "revealed" : "hidden"} ${isHoleCard ? "hole-card" : ""} ${isCommunityCard ? "community-card" : ""} ${isBurnedCard ? "burned-card" : ""}`}
+        onClick={handleCardClick}
+        style={{ cursor: isRevealed ? "pointer" : "default" }}
+      >
+        {/* Card display */}
+        {!isRevealed ? (
+          // Unrevealed card: always show back with hash overlay
+          <div className="card-back">
+            <CardComponent size="small" />
+            <div className="hash-overlay" title={provenance.card_hash}>
+              {shortenHash(provenance.card_hash, 6, 4)}
+            </div>
+          </div>
+        ) : isFlipped ? (
+          // Revealed card: back view (after toggle)
+          <div className="card-back">
+            <CardComponent size="small" />
+            <div className="hash-overlay" title={provenance.card_hash}>
+              {shortenHash(provenance.card_hash, 6, 4)}
+            </div>
+          </div>
+        ) : (
+          // Revealed card: front view (verified or unverified)
+          <div className="card-display">
+            <CardComponent card={provenance.card} size="small" />
+            {calculatedHashes.has(position) && (
+              <div
+                className="hash-overlay hash-overlay-front"
+                title={calculatedHashes.get(position)}
+              >
+                {shortenHash(calculatedHashes.get(position)!, 6, 4)}
+              </div>
+            )}
+            {verifyingCard === position && (
+              <div className="hash-overlay hash-overlay-loading">
+                Calculating...
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Card type badge */}
+        {isHoleCard && <div className="card-type-badge">H</div>}
+        {isCommunityCard && !isHoleCard && (
+          <div className="card-type-badge">C</div>
+        )}
+        {isBurnedCard && !isHoleCard && !isCommunityCard && (
+          <div className="card-type-badge">B</div>
+        )}
+
+        {/* Position label */}
+        <div className="card-position">#{position}</div>
+
+        {/* Verification badge (only show when verified) */}
+        {hashVerified !== undefined &&
+          calculatedHashes.has(position) &&
+          !isFlipped && (
+            <div
+              className={`hash-badge ${hashVerified ? "match" : "mismatch"}`}
+            >
+              {hashVerified ? "✓" : "✗"}
+            </div>
+          )}
+      </div>
+    );
+  };
+
+  if (loading) {
+    return (
+      <section className="rng-panel">
+        <h3 className="panel-title">🃏 Deck Transparency</h3>
+        <div className="loading-state">Loading deck data...</div>
+      </section>
+    );
+  }
+
+  const allCardsRevealed = gameFinished;
+  const revealedCount = revealedCards.size;
 
   return (
     <section className="rng-panel">
       <h3 className="panel-title">
         {allCardsRevealed
           ? "🃏 Full Shuffled Deck (52 cards)"
-          : deckIsHidden
-            ? "🔒 Deck Hashes (52 cards - deck hidden until game ends)"
-            : `🃏 Deck with Card Hashes (${revealedCards.length} cards revealed)`}
+          : `🃏 Deck Transparency (${revealedCount} cards revealed)`}
       </h3>
 
       <div className="deck-info-banner">
         {allCardsRevealed ? (
           <p className="info-hint">
-            ✅ Game ended. All cards are now visible. Verify that each card
-            matches its hash.
-          </p>
-        ) : deckIsHidden ? (
-          <p className="info-hint">
-            🔒 <strong>Security:</strong> The deck is hidden during gameplay to
-            ensure fairness. You can see the cryptographic hash of each card
-            position. After the game ends, the full deck will be revealed for
-            verification.
+            ✅ Game ended. All cards are now visible. Click any card to toggle
+            between front/back view and verify its hash. On first click, the
+            hash is calculated and a verification badge (✓/✗) appears.
           </p>
         ) : (
           <p className="info-hint">
-            🔒 All 52 card hashes are shown below. Revealed cards show actual
-            values. Hidden cards show only their hash. After game ends, verify
-            all cards match their hashes.
+            🔒 During gameplay: You can see your hole cards and community cards.
+            All 52 card hashes are visible. Other cards show as face-down with
+            their hash. Click revealed cards to verify their hash integrity.
           </p>
         )}
       </div>
 
-      {deckIsHidden && (
-        <div className="deck-grid">
-          {/* Show 52 card hash placeholders when deck is hidden */}
-          {Array.from({ length: 52 }, (_, index) => {
-            const cardHash = cardHashes.get(index);
+      {/* Display all 52 cards in shuffled_position order (0-51) */}
+      {/* Cards are displayed by their shuffled_position, which represents the actual deal order */}
+      <div className="deck-grid">
+        {Array.from({ length: 52 }, (_, index) => {
+          const provenance = cardProvenance.get(index);
+          if (!provenance) {
             return (
-              <div
-                key={index}
-                className="deck-card-item-wrapper"
-                title={`Card Hash: ${cardHash || "Loading..."}`}
-              >
-                <div className="deck-card-hash-overlay">
-                  {cardHash ? shortenHash(cardHash, 6, 4) : "..."}
+              <div key={index} className="card-item-wrapper hidden">
+                <div className="card-back">
+                  <CardComponent size="small" />
+                  <div className="hash-overlay">Loading...</div>
                 </div>
-                <CardComponent size="microscopic" />
                 <div className="card-position">#{index}</div>
               </div>
             );
-          })}
-        </div>
-      )}
-
-      {!deckIsHidden && (
-        <div className="deck-grid">
-          {rngData.shuffled_deck.map((card, index) => {
-            const cardStatus = isCardRevealed(index);
-            const isRevealed = cardStatus.revealed || allCardsRevealed;
-            const cardHash = cardHashes.get(index);
-            const displayHash = cardHash ? shortenHash(cardHash, 6, 4) : "...";
-
-            return (
-              <div
-                key={index}
-                className={`deck-card-item-wrapper ${
-                  cardStatus.type === "hole" ? "hole-card" : ""
-                } ${cardStatus.type === "community" ? "community-card" : ""}`}
-                title={cardHash ? `Hash: ${cardHash}` : "Calculating hash..."}
-              >
-                {/* Show card with hash overlay */}
-                {isRevealed ? (
-                  <>
-                    <CardComponent
-                      card={card}
-                      size="microscopic"
-                      hash={cardHash}
-                    />
-                    {cardHash && (
-                      <div className="card-hash-overlay" title={cardHash}>
-                        {displayHash}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <CardComponent size="microscopic" />
-                    <div className="deck-card-hash-overlay">
-                      {loadingHashes ? "..." : displayHash}
-                    </div>
-                  </>
-                )}
-                <div className="card-position">
-                  <span>#{index}</span>
-                  {cardStatus.type && (
-                    <span className="card-type-badge">
-                      {cardStatus.type === "hole" ? "H" : "C"}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+          }
+          return (
+            <CardItem key={index} position={index} provenance={provenance} />
+          );
+        })}
+      </div>
 
       <div className="panel-footer">
         <p className="info-hint">
           {allCardsRevealed ? (
             <>
               <strong>✅ Full Transparency:</strong> All 52 cards are visible.
-              Each card shows both its value and hash. Verify that each card's
-              hash matches its committed hash. Any mismatch would indicate
-              tampering.
+              Click any card to toggle between front and back, and verify its
+              hash. A verification badge (✓/✗) shows if the hash matches.
             </>
           ) : (
             <>
-              <strong>🔒 Hash Commitment:</strong> All 52 card hashes are
-              visible in deck order. Revealed cards (hole cards marked "H",
-              community cards marked "C") show both value and hash. Hidden cards
-              show only their hash. After the game ends, verify all cards match
-              their hashes.
+              <strong>🔒 Partial Visibility:</strong> You can see{" "}
+              {revealedCount} cards (your hole cards + community cards). All
+              hashes are visible for verification. Full deck revealed after game
+              ends. Card badges: <strong>H</strong> = Hole cards,{" "}
+              <strong>C</strong> = Community cards, <strong>B</strong> = Burned
+              cards.
             </>
           )}
         </p>
 
-        {!allCardsRevealed && revealedCards.length > 0 && (
-          <div className="revealed-summary">
-            <div className="summary-item">
-              <span className="summary-label">Hole Cards Revealed:</span>
-              <span className="summary-value">
-                {revealedCards.filter((r) => r.type === "hole").length}
-              </span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Community Cards Revealed:</span>
-              <span className="summary-value">
-                {revealedCards.filter((r) => r.type === "community").length}
-              </span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Total Hashes Visible:</span>
-              <span className="summary-value">52</span>
-            </div>
-            <div className="summary-item">
-              <span className="summary-label">Cards Hidden:</span>
-              <span className="summary-value">{52 - revealedCards.length}</span>
-            </div>
-          </div>
-        )}
-
         {allCardsRevealed && (
           <div className="verification-reminder">
             <p className="info-hint">
-              <strong>🔍 Verification:</strong> You can now verify each card's
-              hash matches the committed hash. Hover over any card to see its
-              full hash. All hashes were committed before any cards were dealt.
+              <strong>🔍 Verification:</strong> Click any revealed card to
+              calculate its hash from the card value, suit, position, and round
+              ID. A ✓ badge means the hash matches (deck integrity confirmed).
+              Click again to toggle between the calculated hash and the original
+              hash.
             </p>
           </div>
         )}

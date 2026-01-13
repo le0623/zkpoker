@@ -323,7 +323,7 @@ pub struct StorableTable {
     pub last_timer_started_timestamp: u64,
     pub users: Users,
     pub queue: Vec<QueueItem>,
-    
+
     // RNG Transparency fields
     pub rng_history: Vec<RngMetadata>,
     pub card_provenance: HashMap<String, CardProvenance>,
@@ -458,7 +458,7 @@ impl PublicTable {
 // ============================================================================
 
 /// RNG Metadata for transparency and verification
-/// 
+///
 /// This structure stores all information needed to verify the fairness
 /// of card dealing in a poker game, including the raw random bytes from
 /// the Internet Computer's management canister, time seeds, and the
@@ -507,14 +507,14 @@ impl Default for RngMetadata {
 }
 
 /// Card Provenance tracks the journey of a single card through the shuffle
-/// 
+///
 /// This allows players to verify exactly where each card came from and
 /// how it ended up in their hand, providing complete transparency.
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 pub struct CardProvenance {
     /// Round ID this card belongs to
     pub round_id: u64,
-    
+
     /// The card (e.g., Ace of Spades)
     pub card: Card,
 
@@ -540,7 +540,10 @@ impl Default for CardProvenance {
     fn default() -> Self {
         CardProvenance {
             round_id: 0,
-            card: Card::new(crate::poker::core::Value::Two, crate::poker::core::Suit::Spade),
+            card: Card::new(
+                crate::poker::core::Value::Two,
+                crate::poker::core::Suit::Spade,
+            ),
             original_position: 0,
             shuffled_position: 0,
             card_hash: String::new(),
@@ -555,16 +558,16 @@ impl Default for CardProvenance {
 pub struct RngStats {
     /// Total number of rounds with RNG data
     pub total_rounds: u64,
-    
+
     /// Total number of cards being tracked
     pub total_cards_tracked: u64,
-    
+
     /// The oldest round ID in history
     pub oldest_round_id: Option<u64>,
-    
+
     /// The latest round ID in history
     pub latest_round_id: Option<u64>,
-    
+
     /// Current round ticker from the table
     pub current_round_ticker: u64,
 }

@@ -39,10 +39,16 @@ export function RngTransparencyGuide() {
           </div>
 
           <div className="guide-section">
-            <h4>Step 3: Click "Verify Shuffle" Button</h4>
+            <h4>Step 3: Click "Verify Shuffle" Button (After Game Ends)</h4>
             <p>
-              This button re-computes the deck hash using the same random bytes and algorithm.
-              If the hash matches the stored hash, the shuffle is proven fair.
+              <strong>🔒 Security Note:</strong> The "Verify Shuffle" button is only available
+              <strong> after the game ends</strong>. This ensures the commit-reveal security model:
+              the deck hash is committed before dealing, and verification data is only revealed
+              after the game concludes.
+            </p>
+            <p>
+              Once enabled, this button re-computes the deck hash using the same random bytes
+              and algorithm. If the hash matches the stored hash, the shuffle is proven fair.
             </p>
           </div>
 
@@ -63,14 +69,18 @@ export function RngTransparencyGuide() {
           </div>
 
           <div className="guide-section">
-            <h4>Step 5: Independent Verification (Optional)</h4>
+            <h4>Step 5: Independent Verification (After Game Ends)</h4>
+            <p>
+              <strong>🔒 Security Note:</strong> Export functions are only available
+              <strong> after the game ends</strong> to protect sensitive data during gameplay.
+            </p>
             <p>
               For maximum transparency, you can:
             </p>
             <ul>
-              <li>📥 <strong>Export Proof</strong> - Download JSON with all RNG data</li>
-              <li>🔍 <strong>Export Script</strong> - Download verification script</li>
-              <li>🔗 Copy random bytes and hash for external verification</li>
+              <li>📥 <strong>Export Proof</strong> - Download JSON with all RNG data (available after game ends)</li>
+              <li>🔍 <strong>Export Script</strong> - Download verification script (available after game ends)</li>
+              <li>🔗 Copy random bytes and hash for external verification (visible from start)</li>
             </ul>
             <p>
               Use these files to verify the shuffle on your own computer using
@@ -81,11 +91,12 @@ export function RngTransparencyGuide() {
           <div className="guide-section highlight">
             <h4>✅ What Proves Transparency?</h4>
             <ul>
-              <li>✅ Random bytes from IC VRF (cryptographically secure)</li>
+              <li>✅ Random bytes from IC VRF (cryptographically secure, visible from start)</li>
               <li>✅ Deck hash committed BEFORE dealing (commit-reveal scheme)</li>
+              <li>✅ Verification only after game ends (prevents deck reconstruction during play)</li>
               <li>✅ Full deck visible after game (complete audit trail)</li>
               <li>✅ On-chain storage (immutable, cannot be deleted)</li>
-              <li>✅ Independent verification possible (export and verify yourself)</li>
+              <li>✅ Independent verification possible (export and verify yourself after game ends)</li>
             </ul>
           </div>
 

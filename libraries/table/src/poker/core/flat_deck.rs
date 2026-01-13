@@ -1,4 +1,4 @@
-use crate::poker::core::card::Card;
+use crate::poker::core::card::{Card, Suit, Value};
 use crate::poker::core::deck::Deck;
 use std::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
 
@@ -103,8 +103,24 @@ impl From<Deck> for FlatDeck {
 }
 
 impl FlatDeck {
+    /// Create a new shuffled deck from random bytes.
+    ///
+    /// Generates cards in deterministic sorted order (matching Card's Ord implementation)
+    /// to ensure verification can recreate the exact same initial deck state.
+    /// This avoids the non-deterministic iteration order of HashSet.
     pub fn new(bytes: Vec<u8>) -> Self {
-        let cards: Vec<Card> = Deck::default().into_iter().collect();
+        // Generate cards deterministically in sorted order
+        // This matches the pattern used in Deck::default() but produces sorted order directly
+        let mut cards = Vec::with_capacity(52);
+        for v in &Value::values() {
+            for s in &Suit::suits() {
+                cards.push(Card {
+                    value: *v,
+                    suit: *s,
+                });
+            }
+        }
+        // Cards are now in sorted order (TwoSpade, TwoClub, ..., AceDiamond)
         let mut fdeck = Self { cards };
         fdeck.shuffle(bytes);
 

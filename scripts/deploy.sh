@@ -77,8 +77,8 @@ compile_and_extract() {
 deploy_canisters() {
   local environment=$1
 
-  dfx generate
   ./scripts/download-canister-files.sh
+  dfx generate
 
   if [ "$environment" == "local" ]; then
     echo "Deploying canisters to local network..."

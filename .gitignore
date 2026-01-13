@@ -36,3 +36,4 @@ msg.json
 register.json
 /*.wasm
 /*.wasm.gz
+.npmrc

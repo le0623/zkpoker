@@ -19,9 +19,14 @@ export type { RngMetadata, CardProvenance, RngStats, Card, DealStage };
 /**
  * Format card for consistent string representation
  * Used for hash calculation to match backend format
+ * Backend uses: format!("{:?}:{:?}", card.value, card.suit)
+ * Which produces strings like "Ace:Spade", "Two:Club", etc.
+ * In TypeScript, Candid enums are objects like { Ace: null }, so we extract the key
  */
 export function formatCard(card: Card): string {
-  return `${card.value}:${card.suit}`;
+  const valueKey = Object.keys(card.value)[0];
+  const suitKey = Object.keys(card.suit)[0];
+  return `${valueKey}:${suitKey}`;
 }
 
 /**

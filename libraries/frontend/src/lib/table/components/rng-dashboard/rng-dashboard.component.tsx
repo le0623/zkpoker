@@ -1,14 +1,14 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { RngMetadata } from '../../types/rng.types';
-import type { _SERVICE } from '@declarations/table_canister/table_canister.did';
-import type { PublicTable } from '@declarations/table_index/table_index.did';
-import { useTable } from '../../context/table.context';
-import { RngSourcePanel } from './rng-source-panel.component';
-import { RngDeckPanel } from './rng-deck-panel.component';
-import { RngVerificationPanel } from './rng-verification-panel.component';
-import { RngTransparencyGuide } from './rng-transparency-guide.component';
-import { RngManualVerify } from './rng-manual-verify.component';
-import './rng-dashboard.styles.css';
+import { useState, useEffect, useMemo } from "react";
+import type { RngMetadata } from "../../types/rng.types";
+import type { _SERVICE } from "@declarations/table_canister/table_canister.did";
+import type { PublicTable } from "@declarations/table_index/table_index.did";
+import { useTable } from "../../context/table.context";
+import { RngSourcePanel } from "./rng-source-panel.component";
+import { RngDeckPanel } from "./rng-deck-panel.component";
+import { RngVerificationPanel } from "./rng-verification-panel.component";
+import { RngTransparencyGuide } from "./rng-transparency-guide.component";
+import { RngManualVerify } from "./rng-manual-verify.component";
+import "./rng-dashboard.styles.css";
 
 interface RngDashboardProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ interface RngDashboardProps {
   tableActor: _SERVICE;
 }
 
-type VerificationStatus = 'idle' | 'pending' | 'verified' | 'failed';
+type VerificationStatus = "idle" | "pending" | "verified" | "failed";
 
 export function RngDashboard({
   isOpen,
@@ -25,10 +25,24 @@ export function RngDashboard({
   roundId,
   tableActor,
 }: RngDashboardProps) {
+  const { table } = useTable();
   const [rngData, setRngData] = useState<RngMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [verificationStatus, setVerificationStatus] = useState<VerificationStatus>('idle');
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>("idle");
+
+  // Calculate if game has ended (for security checks)
+  const gameEnded = useMemo(() => {
+    if (!rngData) return false;
+    // Method 1: Check if shuffled_deck is populated (52 cards = game ended)
+    if (rngData.shuffled_deck.length === 52) return true;
+    // Method 2: Check table state (winners exist = game ended)
+    const firstSortedUsers = table?.sorted_users?.[0];
+    if (firstSortedUsers !== undefined && firstSortedUsers.length > 0)
+      return true;
+    return false;
+  }, [rngData, table]);
 
   useEffect(() => {
     if (isOpen) {
@@ -39,22 +53,20 @@ export function RngDashboard({
   async function loadRngData() {
     setLoading(true);
     setError(null);
-
     try {
       const result = roundId
         ? await tableActor.get_rng_metadata(roundId)
         : await tableActor.get_current_rng_metadata();
-
-      if ('Ok' in result) {
+      if ("Ok" in result) {
         setRngData(result.Ok);
         setError(null);
-      } else if ('Err' in result) {
-        setError('Failed to load RNG data');
+      } else if ("Err" in result) {
+        setError("Failed to load RNG data");
         setRngData(null);
       }
     } catch (err) {
-      console.error('Error loading RNG data:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      console.error("Error loading RNG data:", err);
+      setError(err instanceof Error ? err.message : "Unknown error occurred");
       setRngData(null);
     } finally {
       setLoading(false);
@@ -64,31 +76,31 @@ export function RngDashboard({
   async function handleVerify() {
     if (!rngData) return;
 
-    setVerificationStatus('pending');
+    setVerificationStatus("pending");
     try {
       const result = await tableActor.verify_shuffle(rngData.round_id);
 
-      if ('Ok' in result && result.Ok) {
-        setVerificationStatus('verified');
+      if ("Ok" in result && result.Ok) {
+        setVerificationStatus("verified");
       } else {
-        setVerificationStatus('failed');
+        setVerificationStatus("failed");
       }
     } catch (err) {
-      console.error('Verification error:', err);
-      setVerificationStatus('failed');
+      console.error("Verification error:", err);
+      setVerificationStatus("failed");
     }
   }
 
   // Close on ESC key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === "Escape" && isOpen) {
         onClose();
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -134,11 +146,12 @@ export function RngDashboard({
               <RngTransparencyGuide />
               <RngSourcePanel rngData={rngData} />
               <RngDeckPanel rngData={rngData} tableActor={tableActor} />
-              <RngManualVerify rngData={rngData} />
+              {/* <RngManualVerify rngData={rngData} /> */}
               <RngVerificationPanel
                 verificationStatus={verificationStatus}
                 onVerify={handleVerify}
                 rngData={rngData}
+                gameEnded={gameEnded}
               />
             </>
           )}
@@ -153,4 +166,3 @@ export function RngDashboard({
     </div>
   );
 }
-

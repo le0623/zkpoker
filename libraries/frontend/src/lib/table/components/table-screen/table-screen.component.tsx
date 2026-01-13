@@ -428,7 +428,7 @@ export const TableScreenComponent = memo<{ table_principal: Principal }>(
       queryFn: async () => {
         if (!actor) throw new Error(`No valid id found in url`);
         try {
-          const d = await actor.get_table();   
+          const d = await actor.get_table();  
           if ("Err" in d) throw d.Err;
           return d.Ok;
         } catch (e) {

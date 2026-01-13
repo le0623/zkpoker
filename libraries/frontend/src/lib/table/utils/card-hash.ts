@@ -31,7 +31,7 @@ export async function calculateCardHash(
   const roundIdView = new DataView(roundIdBytes.buffer);
   roundIdView.setBigUint64(0, roundId, true); // true = little-endian
 
-  // Step 2: Format card as string (matches backend format)
+  // Step 2: Format card as string
   const cardString = formatCard(card);
   const encoder = new TextEncoder();
   const cardBytes = encoder.encode(cardString);

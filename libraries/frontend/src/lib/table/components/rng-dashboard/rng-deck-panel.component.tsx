@@ -166,32 +166,6 @@ export function RngDeckPanel({
     return valueKey === "Two" && suitKey === "Spade";
   };
 
-  // Identify burned cards: revealed cards that are NOT hole cards and NOT community cards
-  const burnedCardPositions = useMemo(() => {
-    const positions = new Set<number>();
-    if (gameFinished) {
-      // After game ends, all cards are revealed
-      // Burned cards are revealed cards that are not hole cards and not community cards
-      Array.from(cardProvenance.values()).forEach((prov) => {
-        if (
-          prov.round_id === rngData.round_id &&
-          !isDummyCard(prov.card) &&
-          !holeCardPositions.has(prov.shuffled_position) &&
-          !communityCardPositions.has(prov.shuffled_position)
-        ) {
-          positions.add(prov.shuffled_position);
-        }
-      });
-    }
-    return positions;
-  }, [
-    cardProvenance,
-    gameFinished,
-    holeCardPositions,
-    communityCardPositions,
-    rngData.round_id,
-  ]);
-
   // Interactive card component (plan section 2.4)
   const CardItem = ({
     position,
@@ -206,7 +180,6 @@ export function RngDeckPanel({
     const hashVerified = verifiedHashes.get(position);
     const isHoleCard = holeCardPositions.has(position);
     const isCommunityCard = communityCardPositions.has(position);
-    const isBurnedCard = burnedCardPositions.has(position);
 
     const handleCardClick = async () => {
       if (!isRevealed) return; // Only clickable when revealed
@@ -253,7 +226,7 @@ export function RngDeckPanel({
 
     return (
       <div
-        className={`card-item-wrapper ${isRevealed ? "revealed" : "hidden"} ${isHoleCard ? "hole-card" : ""} ${isCommunityCard ? "community-card" : ""} ${isBurnedCard ? "burned-card" : ""}`}
+        className={`card-item-wrapper ${isRevealed ? "revealed" : "hidden"} ${isHoleCard ? "hole-card" : ""} ${isCommunityCard ? "community-card" : ""}`}
         onClick={handleCardClick}
         style={{ cursor: isRevealed ? "pointer" : "default" }}
       >
@@ -298,9 +271,6 @@ export function RngDeckPanel({
         {isHoleCard && <div className="card-type-badge">H</div>}
         {isCommunityCard && !isHoleCard && (
           <div className="card-type-badge">C</div>
-        )}
-        {isBurnedCard && !isHoleCard && !isCommunityCard && (
-          <div className="card-type-badge">B</div>
         )}
 
         {/* Position label */}
@@ -392,8 +362,7 @@ export function RngDeckPanel({
               {revealedCount} cards (your hole cards + community cards). All
               hashes are visible for verification. Full deck revealed after game
               ends. Card badges: <strong>H</strong> = Hole cards,{" "}
-              <strong>C</strong> = Community cards, <strong>B</strong> = Burned
-              cards.
+              <strong>C</strong> = Community cards.
             </>
           )}
         </p>

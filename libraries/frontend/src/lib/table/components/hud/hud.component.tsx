@@ -1,155 +1,196 @@
-import classNames from 'classnames';
-import { AnimatePresence, motion } from 'framer-motion';
-import React, { memo, useMemo, useState, useCallback, useEffect } from 'react';
+import classNames from "classnames";
+import { AnimatePresence, motion } from "framer-motion";
+import React, { memo, useMemo, useState, useCallback, useEffect } from "react";
 
-import { useUser } from '@lib/user';
-import { TokenAmountToString } from '@lib/utils/token-amount-conversion';
+import { useUser } from "@lib/user";
+import { TokenAmountToString } from "@lib/utils/token-amount-conversion";
 import {
-  ButtonComponent, DynamicSizeComponent, Modal, ModalFooterPortal, TitleTextComponent,
+  ButtonComponent,
+  DynamicSizeComponent,
+  Modal,
+  ModalFooterPortal,
+  TitleTextComponent,
   UnwrapOptional,
-  WeirdKnobComponent
-} from '@zk-game-dao/ui';
-import { CurrencyInputComponent, useCurrencyManagerMeta } from '@zk-game-dao/currency';
+  WeirdKnobComponent,
+} from "@zk-game-dao/ui";
+import {
+  CurrencyInputComponent,
+  useCurrencyManagerMeta,
+} from "@zk-game-dao/currency";
 
 import {
-  useCurrentTableTurnProgressRemainder, useNewRoundProgress, useTable
-} from '../../context/table.context';
-import { CardComponent } from '../card/card.component';
-import { HudBalanceComponent } from './hud-balance.component';
-import { HUDBettingConsumer, ProvideHUDBettingContext, useSitOut } from './hud-betting.context';
-import { HudPlayButtonsComponent } from './hud-play-buttons.component';
-import { HUDQuickActionsComponent } from './hud-quick-actions.component';
-import { HudSeperator } from './hud-seperator.component';
-import { useTournament } from '../../../tournament/context/tournament.context';
-import { useEnterTexts } from '../../../tournament/components/enter-modal.component';
+  useCurrentTableTurnProgressRemainder,
+  useNewRoundProgress,
+  useTable,
+} from "../../context/table.context";
+import { CardComponent } from "../card/card.component";
+import { HudBalanceComponent } from "./hud-balance.component";
+import {
+  HUDBettingConsumer,
+  ProvideHUDBettingContext,
+  useSitOut,
+} from "./hud-betting.context";
+import { HudPlayButtonsComponent } from "./hud-play-buttons.component";
+import { HUDQuickActionsComponent } from "./hud-quick-actions.component";
+import { HudSeperator } from "./hud-seperator.component";
+import { useTournament } from "../../../tournament/context/tournament.context";
+import { useEnterTexts } from "../../../tournament/components/enter-modal.component";
 
 // Helper component to handle the input row with hooks
-const HUDInputRow = memo<{ raise: any; currencyType: any }>(({ raise, currencyType }) => {
-  const meta = useCurrencyManagerMeta(currencyType);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  const handleSliderChange = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const padding = 24; // px-6 = 24px on each side
-    const effectiveWidth = rect.width - (padding * 2);
-    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth));
-    const range = Number(raise.max) - Number(raise.min);
-    const newValue = BigInt(Math.round(Number(raise.min) + percent * range));
-    raise.change(newValue);
-  }, [raise]);
+const HUDInputRow = memo<{ raise: any; currencyType: any }>(
+  ({ raise, currencyType }) => {
+    const meta = useCurrencyManagerMeta(currencyType);
+    const [isDragging, setIsDragging] = useState(false);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDragging(true);
-    handleSliderChange(e);
-  }, [handleSliderChange]);
+    const handleSliderChange = useCallback(
+      (e: React.MouseEvent<HTMLDivElement>) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const padding = 24; // px-6 = 24px on each side
+        const effectiveWidth = rect.width - padding * 2;
+        const percent = Math.max(
+          0,
+          Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth)
+        );
+        const range = Number(raise.max) - Number(raise.min);
+        const newValue = BigInt(
+          Math.round(Number(raise.min) + percent * range)
+        );
+        raise.change(newValue);
+      },
+      [raise]
+    );
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!isDragging) return;
-    const slider = document.getElementById('raise-slider');
-    if (!slider) return;
-    
-    const rect = slider.getBoundingClientRect();
-    const padding = 24; // px-6 = 24px on each side
-    const effectiveWidth = rect.width - (padding * 2);
-    const percent = Math.max(0, Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth));
-    const range = Number(raise.max) - Number(raise.min);
-    const newValue = BigInt(Math.round(Number(raise.min) + percent * range));
-    raise.change(newValue);
-  }, [isDragging, raise]);
+    const handleMouseDown = useCallback(
+      (e: React.MouseEvent<HTMLDivElement>) => {
+        setIsDragging(true);
+        handleSliderChange(e);
+      },
+      [handleSliderChange]
+    );
 
-  const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+    const handleMouseMove = useCallback(
+      (e: MouseEvent) => {
+        if (!isDragging) return;
+        const slider = document.getElementById("raise-slider");
+        if (!slider) return;
 
-  useEffect(() => {
-    if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
-    }
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+        const rect = slider.getBoundingClientRect();
+        const padding = 24; // px-6 = 24px on each side
+        const effectiveWidth = rect.width - padding * 2;
+        const percent = Math.max(
+          0,
+          Math.min(1, (e.clientX - rect.left - padding) / effectiveWidth)
+        );
+        const range = Number(raise.max) - Number(raise.min);
+        const newValue = BigInt(
+          Math.round(Number(raise.min) + percent * range)
+        );
+        raise.change(newValue);
+      },
+      [isDragging, raise]
+    );
 
-  return (
-    <motion.div
-      variants={{
-        visible: {
-          opacity: 1,
-          y: -8,
-          scale: 1,
-        },
-        hidden: {
-          opacity: 0,
-          y: 16,
-          scale: 0.9,
-        },
-      }}
-      initial="hidden"
-      animate="visible"
-      exit="hidden"
-      className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11 flex-wrap"
-    >
-      <div className='absolute inset-3 bg-black blur-2xl opacity-30' />
-      <div className='flex items-center justify-center gap-1 relative z-10'>
-      <HUDQuickActionsComponent
-        quickActions={raise.quickActions}
-        onChange={raise.change}
-        currentValue={raise.value}
-      />
-      <CurrencyInputComponent
-        currencyType={currencyType}
-        value={raise.value}
-        onChange={raise.change}
-        min={raise.min}
-        max={raise.max}
-        className="w-32 rounded-xl bg-neutral-400 bg-opacity-70"
-        hideMaxQuickAction
-        hideMinQuickAction
-      />
-      {raise.min !== undefined && raise.max !== undefined && (
-        <div className="flex flex-col gap-1 min-w-[120px]">
-          {/* Interactive Slider bar - expanded clickable area */}
-          <div 
-            id="raise-slider"
-            className="relative h-12 cursor-pointer flex items-center px-6"
-            onMouseDown={handleMouseDown}
-          >
-            {/* Visual track */}
-            <div className="absolute left-6 right-6 h-2 bg-neutral-600 bg-opacity-50 rounded-full" />
-            
-            {/* Chip indicator - positioned relative to track */}
-            <img
-              src="/icons/chip-black.svg"
-              alt="slider"
-              className={`absolute top-1/2 -translate-y-1/2 w-12 h-12 pointer-events-none ${isDragging ? 'scale-110' : ''} transition-all duration-150 z-10`}
-              style={{
-                left: `calc((100% - 48px) * ${Math.min(1, Math.max(0, 
-                  ((Number(raise.value) - Number(raise.min)) / (Number(raise.max) - Number(raise.min)))
-                ))})`
-              }}
-            />
-          </div>
+    const handleMouseUp = useCallback(() => {
+      setIsDragging(false);
+    }, []);
+
+    useEffect(() => {
+      if (isDragging) {
+        window.addEventListener("mousemove", handleMouseMove);
+        window.addEventListener("mouseup", handleMouseUp);
+        return () => {
+          window.removeEventListener("mousemove", handleMouseMove);
+          window.removeEventListener("mouseup", handleMouseUp);
+        };
+      }
+    }, [isDragging, handleMouseMove, handleMouseUp]);
+
+    return (
+      <motion.div
+        variants={{
+          visible: {
+            opacity: 1,
+            y: -8,
+            scale: 1,
+          },
+          hidden: {
+            opacity: 0,
+            y: 16,
+            scale: 0.9,
+          },
+        }}
+        initial="hidden"
+        animate="visible"
+        exit="hidden"
+        className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11 flex-wrap"
+      >
+        <div className="absolute inset-3 bg-black blur-2xl opacity-30" />
+        <div className="flex items-center justify-center gap-1 relative z-10">
+          <HUDQuickActionsComponent
+            quickActions={raise.quickActions}
+            onChange={raise.change}
+            currentValue={raise.value}
+          />
+          <CurrencyInputComponent
+            currencyType={currencyType}
+            value={raise.value}
+            onChange={raise.change}
+            min={raise.min}
+            max={raise.max}
+            className="w-32 rounded-xl bg-neutral-400 bg-opacity-70"
+            hideMaxQuickAction
+            hideMinQuickAction
+          />
+          {raise.min !== undefined && raise.max !== undefined && (
+            <div className="flex flex-col gap-1 min-w-[120px]">
+              {/* Interactive Slider bar - expanded clickable area */}
+              <div
+                id="raise-slider"
+                className="relative h-12 cursor-pointer flex items-center px-6"
+                onMouseDown={handleMouseDown}
+              >
+                {/* Visual track */}
+                <div className="absolute left-6 right-6 h-2 bg-neutral-400 bg-opacity-70 rounded-full" />
+
+                {/* Chip indicator - positioned relative to track */}
+                <img
+                  src="/icons/chip-black.svg"
+                  alt="slider"
+                  className={`absolute top-1/2 -translate-y-1/2 w-12 h-12 pointer-events-none ${isDragging ? "scale-110" : ""} transition-all duration-150 z-10`}
+                  style={{
+                    left: `calc((100% - 48px) * ${Math.min(
+                      1,
+                      Math.max(
+                        0,
+                        (Number(raise.value) - Number(raise.min)) /
+                          (Number(raise.max) - Number(raise.min))
+                      )
+                    )})`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
-      )}
-      </div>
-    </motion.div>
-  );
-});
-HUDInputRow.displayName = 'HUDInputRow';
+      </motion.div>
+    );
+  }
+);
+HUDInputRow.displayName = "HUDInputRow";
 
-export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void }>(({ openRngDashboard }) => {
+export const HUDComponent = memo<{
+  openRngDashboard?: (roundId?: bigint) => void;
+}>(({ openRngDashboard }) => {
   const { isOngoing, table, isJoined, userIndex, user } = useTable();
   const { user: zkpUser } = useUser();
 
   const turnProgress = useCurrentTableTurnProgressRemainder(
-    isJoined && table.current_player_index === userIndex,
+    isJoined && table.current_player_index === userIndex
   );
   const newRoundProgress = useNewRoundProgress(isJoined);
   const progress = useMemo(
     () => newRoundProgress ?? turnProgress,
-    [newRoundProgress, turnProgress],
+    [newRoundProgress, turnProgress]
   );
   const sitout = useSitOut();
 
@@ -170,22 +211,19 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
             <HUDBettingConsumer>
               {({ raise, currencyType }) => (
                 <AnimatePresence>
-                  {(
-                    isJoined &&
+                  {isJoined &&
                     table.current_player_index === userIndex &&
                     isOngoing &&
                     raise &&
-                    raise.quickActions?.length > 0
-                  ) && (
+                    raise.quickActions?.length > 0 && (
                       <HUDInputRow raise={raise} currencyType={currencyType} />
                     )}
                 </AnimatePresence>
               )}
             </HUDBettingConsumer>
 
-            <div className='relative flex items-center flex-col'>
-
-              <div className='flex flex-row absolute bottom-full z-0 translate-y-2 group'>
+            <div className="relative flex items-center flex-col">
+              <div className="flex flex-row absolute bottom-full z-0 translate-y-2 group">
                 <AnimatePresence>
                   {user?.data?.cards.map((card, i) => (
                     <motion.div
@@ -210,20 +248,32 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                         },
                       }}
                       initial="hidden"
-                      animate={isJoined &&
+                      animate={
+                        isJoined &&
                         table.current_player_index === userIndex &&
-                        isOngoing ? "turn" : "visible"}
+                        isOngoing
+                          ? "turn"
+                          : "visible"
+                      }
                       exit="hidden"
                       key={i}
                       className={classNames({
                         [isJoined &&
-                          table.current_player_index === userIndex &&
-                          isOngoing ? '-ml-6' : '-ml-4']: i > 0
+                        table.current_player_index === userIndex &&
+                        isOngoing
+                          ? "-ml-6"
+                          : "-ml-4"]: i > 0,
                       })}
                     >
                       <CardComponent
                         card={card}
-                        size={isJoined && table.current_player_index === userIndex && isOngoing ? "medium" : 'small'}
+                        size={
+                          isJoined &&
+                          table.current_player_index === userIndex &&
+                          isOngoing
+                            ? "medium"
+                            : "small"
+                        }
                       />
                     </motion.div>
                   ))}
@@ -244,7 +294,7 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                         "absolute -left-4 -inset-y-4 blur-[8px] transition-colors",
                         progress < 0.2
                           ? "animate-pulse bg-material-medium-1"
-                          : "bg-material-main-3",
+                          : "bg-material-main-3"
                       )}
                       animate="visible"
                       custom={progress}
@@ -272,24 +322,38 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                       <div className="gap-2 flex flex-row items-center justify-center">
                         {!raise?.showInlineInput && isJoined && (
                           <>
-
-                            {!sitout.isSittingOut && autoCheckFold && isOngoing && (
-                              <div className={classNames('transition-transform', { 'scale-90': autoCheckFold.data })}>
-                                <WeirdKnobComponent
-                                  mutate={() => autoCheckFold.mutate(!autoCheckFold.data)}
-                                  isPending={autoCheckFold.isPending}
-                                  variant={autoCheckFold.data ? 'gray' : "transparent"}
+                            {!sitout.isSittingOut &&
+                              autoCheckFold &&
+                              isOngoing && (
+                                <div
+                                  className={classNames(
+                                    "transition-transform",
+                                    { "scale-90": autoCheckFold.data }
+                                  )}
                                 >
-                                  Check/Fold
-                                </WeirdKnobComponent>
-                              </div>
-                            )}
+                                  <WeirdKnobComponent
+                                    mutate={() =>
+                                      autoCheckFold.mutate(!autoCheckFold.data)
+                                    }
+                                    isPending={autoCheckFold.isPending}
+                                    variant={
+                                      autoCheckFold.data
+                                        ? "gray"
+                                        : "transparent"
+                                    }
+                                  >
+                                    Check/Fold
+                                  </WeirdKnobComponent>
+                                </div>
+                              )}
 
                             {isOngoing && !sitout.isSittingOut && (
                               <>
                                 <WeirdKnobComponent
                                   mutate={() => setShowSitOutModal(true)}
-                                  isPending={sitout.isPending || showSitOutModal}
+                                  isPending={
+                                    sitout.isPending || showSitOutModal
+                                  }
                                   variant="transparent"
                                 >
                                   Sit out
@@ -337,8 +401,10 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                             )}
 
                             {/* Show separator if there are any buttons before play buttons */}
-                            {((!sitout.isSittingOut && autoCheckFold && isOngoing) || 
-                              (isOngoing && !sitout.isSittingOut) || 
+                            {((!sitout.isSittingOut &&
+                              autoCheckFold &&
+                              isOngoing) ||
+                              (isOngoing && !sitout.isSittingOut) ||
                               openRngDashboard) && <HudSeperator desktopOnly />}
                           </>
                         )}
@@ -352,26 +418,32 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                             <HudPlayButtonsComponent
                               tournament_table_id={tournament?.user?.table?.id}
                               tournament_is_running={tournament?.isRunning}
-                              tournament_start_time={tournament?.data.start_time}
+                              tournament_start_time={
+                                tournament?.data.start_time
+                              }
                               tournament_state={tournament?.data.state}
                               tournament_join_type={tournament?.joinType}
                               tournamentUserTextsTitle={texts?.title}
-
                               isSittingOut={sitout.isSittingOut}
                               isSittingBackIn={sitout.isSittingBackIn}
                               isSittingOutPending={sitout.isPending}
                               rejoin={sitout.rejoin}
                               sitOut={sitout.sitOut}
-
                               userIndex={userIndex}
                               userPlayerAction={user?.data?.player_action}
-                              userIsQueuedForNextRound={user && "QueuedForNextRound" in user.status}
-
+                              userIsQueuedForNextRound={
+                                user && "QueuedForNextRound" in user.status
+                              }
                               isTableOngoing={isOngoing}
                               current_player_index={table.current_player_index}
                               tableId={table.id}
-                              isTablePaused={UnwrapOptional(table.config.is_paused)}
-                              tableHasMoreThanOnePlayer={table.seats.filter(v => !("Empty" in v)).length > 1}
+                              isTablePaused={UnwrapOptional(
+                                table.config.is_paused
+                              )}
+                              tableHasMoreThanOnePlayer={
+                                table.seats.filter((v) => !("Empty" in v))
+                                  .length > 1
+                              }
                             />
                           </div>
                         </DynamicSizeComponent>
@@ -379,8 +451,6 @@ export const HUDComponent = memo<{ openRngDashboard?: (roundId?: bigint) => void
                     </AnimatePresence>
                   )}
                 </HUDBettingConsumer>
-
-
               </div>
             </div>
           </ProvideHUDBettingContext>

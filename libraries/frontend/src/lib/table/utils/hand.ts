@@ -8,7 +8,8 @@ import { GameType } from "@declarations/table_index/table_index.did";
 export const BuildHand = (
   isSelf: boolean,
   table: Pick<PublicTable, "deal_stage" | "sorted_users" | "user_table_data" | "config">,
-  data?: Pick<UserTableData, "cards" | "player_action">
+  data?: Pick<UserTableData, "cards" | "player_action">,
+  currentViewerPrincipal?: string // Current viewer's principal to check if they're in showdown
 ): Card[] => {
   // Hide the cards for your own user
   if (!data?.cards || isSelf) return [];
@@ -41,6 +42,18 @@ export const BuildHand = (
 
   // Check if is winning by default (everyone else folded or is sitting out)
   if (activePlayers.length === 1) return noCards;
+
+  // SECURITY: Check if current viewer is in showdown
+  // Folded players should not see showdown cards, even if showdown happened
+  if (currentViewerPrincipal) {
+    const showdownPrincipals = new Set(
+      table.sorted_users[0]?.map((uc) => uc.id.toText()) || []
+    );
+    if (!showdownPrincipals.has(currentViewerPrincipal)) {
+      // Viewer is not in showdown (they folded), don't show showdown cards
+      return noCards;
+    }
+  }
 
   return cards;
 };

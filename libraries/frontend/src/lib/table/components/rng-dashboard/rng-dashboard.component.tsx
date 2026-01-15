@@ -143,9 +143,9 @@ export function RngDashboard({
 
           {!loading && !error && rngData && (
             <>
+              <RngDeckPanel rngData={rngData} tableActor={tableActor} />
               <RngTransparencyGuide />
               <RngSourcePanel rngData={rngData} />
-              <RngDeckPanel rngData={rngData} tableActor={tableActor} />
               {/* <RngManualVerify rngData={rngData} /> */}
               <RngVerificationPanel
                 verificationStatus={verificationStatus}

@@ -39,7 +39,12 @@ export const TableSeatContextProvider = memo<{ children: ReactNode, seatIndex: n
     const isSelf = !!zkpUser && !!seatMeta?.user && zkpUser.principal_id.compareTo(seatMeta.user?.principal_id) === 'eq';
     const isDealer = table?.dealer_position === BigInt(seatIndex);
     const isQueued = !!seatMeta?.status && 'QueuedForNextRound' in seatMeta.status;
-    const cards = BuildHand(isSelf, table, seatMeta?.data);
+    
+    // Get current viewer's principal to check if they're in showdown
+    // Folded players should not see showdown cards
+    const currentViewerPrincipal = zkpUser?.principal_id?.toText();
+    
+    const cards = BuildHand(isSelf, table, seatMeta?.data, currentViewerPrincipal);
     return {
       ...seatMeta,
       cards,

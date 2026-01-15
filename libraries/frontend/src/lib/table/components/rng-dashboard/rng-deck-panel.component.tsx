@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import type { RngMetadata, Card, CardProvenance } from "../../types/rng.types";
 import type { _SERVICE } from "@declarations/table_canister/table_canister.did";
 import { useTable } from "../../context/table.context";
@@ -34,6 +34,10 @@ export function RngDeckPanel({
   );
   const [verifyingCard, setVerifyingCard] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [revealedShowdownPlayers, setRevealedShowdownPlayers] = useState<
+    Set<string>
+  >(new Set());
+  const lastRevealOrderRef = useRef<string>("");
 
   // Check if game has finished
   const gameFinished = useMemo(() => {
@@ -124,13 +128,235 @@ export function RngDeckPanel({
       }
     }
 
-    // 4. After game ends, reveal all
-    if (gameFinished) {
-      Array.from(cardProvenance.keys()).forEach((pos) => revealed.add(pos));
+    // 4. After game ends, reveal showdown cards progressively
+    // (See showdown reveal logic below - handled separately)
+
+    return revealed;
+  }, [user, table, cardProvenance, rngData.round_id]);
+
+  // Showdown reveal logic
+  const showdownData = useMemo<{
+    isShowdown: boolean;
+    revealOrder: string[];
+    showdownPlayerCards: Map<string, Set<number>>;
+  } | null>(() => {
+    if (!table || !gameFinished || !cardProvenance.size) return null;
+
+    const firstSortedUsers = table.sorted_users?.[0];
+    if (!firstSortedUsers || firstSortedUsers.length === 0) return null;
+
+    // Check if showdown happened (2+ players remained)
+    const showdownPlayersCount = firstSortedUsers.length;
+    const isShowdown = showdownPlayersCount >= 2;
+
+    // If only 1 player remained, no showdown - don't reveal cards
+    if (!isShowdown) {
+      return {
+        isShowdown: false,
+        revealOrder: [],
+        showdownPlayerCards: new Map(),
+      };
+    }
+
+    // Determine reveal order
+    let firstToRevealPrincipal: string | null = null;
+
+    // Find last aggressor (last Bet/Raise on River)
+    let riverStageIndex = -1;
+    for (let i = table.action_logs.length - 1; i >= 0; i--) {
+      const log = table.action_logs[i];
+      if ("Stage" in log.action_type) {
+        const stage = Object.keys(log.action_type.Stage.stage)[0];
+        if (stage === "River") {
+          riverStageIndex = i;
+          break;
+        }
+      }
+    }
+
+    // Look for last Bet or Raise after River stage started
+    if (riverStageIndex >= 0) {
+      for (let i = table.action_logs.length - 1; i > riverStageIndex; i--) {
+        const log = table.action_logs[i];
+        if (log.user_principal[0]) {
+          if ("Bet" in log.action_type || "Raise" in log.action_type) {
+            firstToRevealPrincipal = log.user_principal[0].toText();
+            break;
+          }
+        }
+      }
+    }
+
+    // If no bets on River, use player left of dealer
+    if (!firstToRevealPrincipal && table.dealer_position !== undefined) {
+      const seats = table.seats || [];
+      const dealerPos = Number(table.dealer_position);
+      // Find next occupied seat after dealer
+      for (let offset = 1; offset < seats.length; offset++) {
+        const seatIndex = (dealerPos + offset) % seats.length;
+        const seat = seats[seatIndex];
+        if ("Occupied" in seat) {
+          // Check if this player is in showdown
+          const principalText = seat.Occupied.toText();
+          if (firstSortedUsers.some((uc) => uc.id.toText() === principalText)) {
+            firstToRevealPrincipal = principalText;
+            break;
+          }
+        }
+      }
+    }
+
+    // Build reveal order (clockwise from first to reveal)
+    const revealOrder: string[] = [];
+    const showdownPrincipals = new Set(
+      firstSortedUsers.map((uc) => uc.id.toText())
+    );
+
+    if (firstToRevealPrincipal && table.seats) {
+      // Find starting position
+      let startIndex = -1;
+      for (let i = 0; i < table.seats.length; i++) {
+        const seat = table.seats[i];
+        if (
+          "Occupied" in seat &&
+          seat.Occupied.toText() === firstToRevealPrincipal
+        ) {
+          startIndex = i;
+          break;
+        }
+      }
+
+      // Collect in clockwise order
+      if (startIndex >= 0) {
+        for (let offset = 0; offset < table.seats.length; offset++) {
+          const seatIndex = (startIndex + offset) % table.seats.length;
+          const seat = table.seats[seatIndex];
+          if ("Occupied" in seat) {
+            const principalText = seat.Occupied.toText();
+            if (showdownPrincipals.has(principalText)) {
+              revealOrder.push(principalText);
+            }
+          }
+        }
+      }
+    }
+
+    // Map showdown players to their card positions
+    const showdownPlayerCards = new Map<string, Set<number>>();
+    for (const userCards of firstSortedUsers) {
+      const principalText = userCards.id.toText();
+      const cardPositions = new Set<number>();
+
+      // Get player's cards from user_table_data
+      const userData = table.user_table_data.find(
+        ([principal]) => principal.toText() === principalText
+      )?.[1];
+
+      if (userData?.cards) {
+        userData.cards.forEach((card) => {
+          const prov = Array.from(cardProvenance.values()).find(
+            (p) => p.round_id === rngData.round_id && cardMatches(p.card, card)
+          );
+          if (prov) {
+            cardPositions.add(prov.shuffled_position);
+          }
+        });
+      }
+
+      if (cardPositions.size > 0) {
+        showdownPlayerCards.set(principalText, cardPositions);
+      }
+    }
+
+    return {
+      isShowdown: true,
+      revealOrder,
+      showdownPlayerCards,
+    };
+  }, [table, gameFinished, cardProvenance, rngData.round_id]);
+
+  // Progressively reveal showdown players
+  useEffect(() => {
+    if (!showdownData?.isShowdown || !showdownData.revealOrder.length) {
+      // Reset if no showdown
+      setRevealedShowdownPlayers(new Set());
+      lastRevealOrderRef.current = "";
+      return;
+    }
+
+    const currentRevealOrder = showdownData.revealOrder;
+    const orderKey = currentRevealOrder.join(",");
+
+    // Only start reveal if order changed
+    if (orderKey === lastRevealOrderRef.current) {
+      return;
+    }
+
+    lastRevealOrderRef.current = orderKey;
+
+    // Reset and start progressive reveal
+    setRevealedShowdownPlayers(new Set());
+
+    // Progressive reveal: reveal one player every 1.5 seconds
+    const timeouts: NodeJS.Timeout[] = [];
+    for (let i = 0; i < currentRevealOrder.length; i++) {
+      const principal = currentRevealOrder[i];
+      const timeout = setTimeout(
+        () => {
+          setRevealedShowdownPlayers((prev) => {
+            const next = new Set(prev);
+            next.add(principal);
+            return next;
+          });
+        },
+        (i + 1) * 1500
+      ); // 1.5 second delay between each reveal (start after 1.5s)
+      timeouts.push(timeout);
+    }
+
+    return () => {
+      timeouts.forEach((timeout) => clearTimeout(timeout));
+    };
+  }, [showdownData]);
+
+  // Update revealedCards to include showdown cards
+  const allRevealedCards = useMemo(() => {
+    const revealed = new Set(revealedCards);
+
+    // SECURITY: Only reveal showdown cards if current user is in the showdown
+    // Folded players should not see showdown cards
+    const currentUserPrincipal = zkpUser?.principal_id?.toText();
+    const isCurrentUserInShowdown = Boolean(
+      currentUserPrincipal &&
+      showdownData?.isShowdown &&
+      showdownData?.revealOrder &&
+      showdownData.revealOrder.length > 0 &&
+      showdownData.revealOrder.includes(currentUserPrincipal)
+    );
+
+    // Add showdown players' cards that have been revealed (only if user is in showdown)
+    if (
+      isCurrentUserInShowdown &&
+      showdownData?.isShowdown &&
+      showdownData.showdownPlayerCards
+    ) {
+      for (const [
+        principal,
+        cardPositions,
+      ] of showdownData.showdownPlayerCards.entries()) {
+        if (revealedShowdownPlayers.has(principal)) {
+          cardPositions.forEach((pos: number) => revealed.add(pos));
+        }
+      }
     }
 
     return revealed;
-  }, [user, table, cardProvenance, gameFinished, rngData.round_id]);
+  }, [
+    revealedCards,
+    showdownData,
+    revealedShowdownPlayers,
+    zkpUser?.principal_id,
+  ]);
 
   // Identify card types (hole cards, community cards)
   const holeCardPositions = useMemo(() => {
@@ -174,9 +400,9 @@ export function RngDeckPanel({
     position: number;
     provenance: CardProvenance;
   }) => {
-    const isRevealed = gameFinished
-      ? revealedCards.has(position)
-      : revealedCards.has(position) && !isDummyCard(provenance.card);
+    const isRevealed =
+      allRevealedCards.has(position) &&
+      (!gameFinished || !isDummyCard(provenance.card));
     const isFlipped = flippedCards.has(position);
     const hashVerified = verifiedHashes.get(position);
     const isHoleCard = holeCardPositions.has(position);
@@ -291,6 +517,22 @@ export function RngDeckPanel({
     );
   };
 
+  // Check if all showdown cards have been revealed (if showdown happened)
+  const allCardsRevealed = useMemo(() => {
+    if (!gameFinished) return false;
+    if (!showdownData?.isShowdown) {
+      // If no showdown (only 1 player), all cards are "revealed" (none to reveal)
+      return true;
+    }
+    // Check if all showdown players have been revealed
+    return (
+      showdownData.revealOrder.length > 0 &&
+      revealedShowdownPlayers.size >= showdownData.revealOrder.length
+    );
+  }, [gameFinished, showdownData, revealedShowdownPlayers.size]);
+
+  const revealedCount = allRevealedCards.size;
+
   if (loading) {
     return (
       <section className="rng-panel">
@@ -299,9 +541,6 @@ export function RngDeckPanel({
       </section>
     );
   }
-
-  const allCardsRevealed = gameFinished;
-  const revealedCount = revealedCards.size;
 
   return (
     <section className="rng-panel">
@@ -312,18 +551,35 @@ export function RngDeckPanel({
       </h3>
 
       <div className="deck-info-banner">
-        {allCardsRevealed ? (
-          <p className="info-hint">
-            ✅ Game ended. All cards are now visible. Click any card to toggle
-            between front/back view. Use "Verify Hash" button to independently
-            verify each card's cryptographic hash.
-          </p>
+        {gameFinished ? (
+          showdownData?.isShowdown ? (
+            allCardsRevealed ? (
+              <p className="info-hint">
+                ✅ Showdown completed. All cards are now visible. Click any card
+                to verify its cryptographic hash and toggle between front/back
+                view.
+              </p>
+            ) : (
+              <p className="info-hint">
+                🔄 Showdown in progress. Cards are being revealed in order (
+                {revealedShowdownPlayers.size}/{showdownData.revealOrder.length}{" "}
+                players revealed).
+              </p>
+            )
+          ) : (
+            <p className="info-hint">
+              ✅ Game ended. Only one player remained, so no showdown occurred.
+              Community cards and your cards are visible. Click any card to
+              verify its cryptographic hash.
+            </p>
+          )
         ) : (
           <p className="info-hint">
-            🔒 During gameplay: You can see your hole cards and community cards.
-            All 52 card hashes are visible. Other cards show as face-down with
-            their hash. Click "Verify Hash" on revealed cards to check their
-            integrity.
+            🔒 During gameplay: You can see your hole cards (marked with{" "}
+            <strong style={{ color: "#3b82f6" }}>H</strong>) and community cards
+            (marked with <strong style={{ color: "#f59e0b" }}>C</strong>). All
+            52 card hashes are visible. Other cards show as face-down with their
+            hash. Click revealed cards to verify their integrity.
           </p>
         )}
       </div>
@@ -371,10 +627,15 @@ export function RngDeckPanel({
         {allCardsRevealed && (
           <div className="verification-reminder">
             <p className="info-hint">
-              <strong>🔍 Verification:</strong> Click "Verify Hash" on any card
-              to independently calculate its hash from the card value, suit,
-              position, and round ID. A ✓ badge means the hash matches (deck
-              integrity confirmed).
+              <strong>🔍 Verification:</strong> Click any card to independently
+              calculate its hash from the card value, suit, position, and round
+              ID. A ✓ badge means the hash matches (deck integrity confirmed).
+            </p>
+            <p className="info-hint" style={{ marginTop: "0.5rem" }}>
+              <strong>📋 Card Badges:</strong> Cards are marked with badges:{" "}
+              <strong style={{ color: "#3b82f6" }}>H</strong> = Hole card (your
+              private cards), <strong style={{ color: "#f59e0b" }}>C</strong> =
+              Community card (shared cards on the table).
             </p>
           </div>
         )}

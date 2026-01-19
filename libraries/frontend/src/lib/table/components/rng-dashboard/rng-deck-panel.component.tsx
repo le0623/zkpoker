@@ -6,6 +6,7 @@ import { useUser } from "@lib/user";
 import { calculateCardHash } from "../../utils/card-hash";
 import { shortenHash } from "../../types/rng.types";
 import { CardComponent } from "../card/card.component";
+import { getAllSeatAssignments } from "../../utils/seat-lookup";
 
 interface RngDeckPanelProps {
   rngData: RngMetadata;
@@ -20,6 +21,18 @@ export function RngDeckPanel({
 }: RngDeckPanelProps) {
   const { table, user } = useTable();
   const { user: zkpUser } = useUser();
+
+  // Get seat assignments for all players
+  const seatAssignments = useMemo(() => {
+    if (!table) return new Map<string, number>();
+    return getAllSeatAssignments(table);
+  }, [table]);
+
+  // Get current user's principal for comparison
+  const currentUserPrincipal = useMemo(
+    () => zkpUser?.principal_id?.toText(),
+    [zkpUser]
+  );
 
   // New state management as per plan
   const [cardProvenance, setCardProvenance] = useState<
@@ -408,6 +421,24 @@ export function RngDeckPanel({
     const isHoleCard = holeCardPositions.has(position);
     const isCommunityCard = communityCardPositions.has(position);
 
+    // Get seat number for this card
+    const seatNumber = useMemo(() => {
+      if (!provenance.dealt_to || !provenance.dealt_to[0]) return undefined;
+      const principalText = provenance.dealt_to[0].toText();
+      return seatAssignments.get(principalText);
+    }, [provenance.dealt_to, seatAssignments]);
+
+    // Check if this is the current user's card
+    const isCurrentUserCard = useMemo(() => {
+      if (
+        !provenance.dealt_to ||
+        !provenance.dealt_to[0] ||
+        !currentUserPrincipal
+      )
+        return false;
+      return provenance.dealt_to[0].toText() === currentUserPrincipal;
+    }, [provenance.dealt_to, currentUserPrincipal]);
+
     const handleCardClick = async () => {
       if (!isRevealed) return; // Only clickable when revealed
 
@@ -498,6 +529,21 @@ export function RngDeckPanel({
         {isHoleCard && <div className="card-type-badge">H</div>}
         {isCommunityCard && !isHoleCard && (
           <div className="card-type-badge">C</div>
+        )}
+
+        {/* Seat number badge - Always visible for dealt cards */}
+        {seatNumber && (
+          <div
+            className="card-type-badge seat-badge"
+            style={{
+              // For current user's hole cards: below the H badge
+              top: isCurrentUserCard && isHoleCard ? "14px" : "-6px",
+              left: isCurrentUserCard && isHoleCard ? "-6px" : "auto",
+              right: isCurrentUserCard && isHoleCard ? "auto" : "-6px",
+            }}
+          >
+            #{seatNumber}
+          </div>
         )}
 
         {/* Position label */}
@@ -635,7 +681,9 @@ export function RngDeckPanel({
               <strong>📋 Card Badges:</strong> Cards are marked with badges:{" "}
               <strong style={{ color: "#3b82f6" }}>H</strong> = Hole card (your
               private cards), <strong style={{ color: "#f59e0b" }}>C</strong> =
-              Community card (shared cards on the table).
+              Community card (shared cards on the table),{" "}
+              <strong style={{ color: "#6366f1" }}>#N</strong> = Seat number
+              (which player received the card).
             </p>
           </div>
         )}

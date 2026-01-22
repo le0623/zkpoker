@@ -1,6 +1,8 @@
 use errors::{game_error::GameError, trace_err, traced_error::TracedError};
 
+use crate::poker::core::Card;
 use crate::poker::game::types::GameType;
+use user::user::WalletPrincipalId;
 
 use super::{
     action_log::ActionType,
@@ -9,6 +11,70 @@ use super::{
 };
 
 impl Table {
+    /// Helper function to update card provenance when a card is dealt
+    /// Finds the provenance record matching the card and updates dealt_to and dealt_at_stage
+    fn update_card_provenance(
+        &mut self,
+        card: Card,
+        dealt_to: Option<WalletPrincipalId>,
+        dealt_at_stage: DealStage,
+    ) {
+        let round_id = self.round_ticker;
+        let mut found = false;
+
+        #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+        let mut total_checked = 0;
+        #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+        let mut round_match_count = 0;
+
+        // Find the provenance record matching this card for the current round
+        // Since each card is unique in a deck, we can match by card value/suit
+        for (_, provenance) in self.card_provenance.iter_mut() {
+            #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+            {
+                total_checked += 1;
+            }
+            if provenance.round_id == round_id {
+                #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+                {
+                    round_match_count += 1;
+                }
+                if provenance.card.value == card.value
+                    && provenance.card.suit == card.suit
+                    && provenance.dealt_to.is_none()
+                // Only update if not already dealt
+                {
+                    provenance.dealt_to = dealt_to;
+                    provenance.dealt_at_stage = Some(dealt_at_stage);
+                    found = true;
+                    break; // Each card is unique, so we found it
+                }
+            }
+        }
+
+        // Debug: Log if card wasn't found (shouldn't happen in normal flow)
+        #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+        if !found {
+            ic_cdk::println!(
+                "⚠️ Warning: Could not find provenance for card {:?}:{:?} in round {} (checked {} records, {} matched round)",
+                card.value,
+                card.suit,
+                round_id,
+                total_checked,
+                round_match_count
+            );
+            // If no records matched the round, there might be a round_id mismatch
+            if round_match_count == 0 {
+                ic_cdk::println!(
+                    "⚠️ No provenance records found for round {}! Total provenance records: {}",
+                    round_id,
+                    self.card_provenance.len()
+                );
+            }
+        }
+        let _ = found; // Suppress unused variable warning in non-wasm builds
+    }
+
     /// Deals the cards for the current stage
     ///
     /// # Parameters
@@ -81,23 +147,38 @@ impl Table {
             _ => 2,
         };
 
+        // Collect occupied seat principals first to avoid borrowing conflicts
+        let occupied_principals: Vec<WalletPrincipalId> = self
+            .seats
+            .iter()
+            .filter_map(|seat| {
+                if let SeatStatus::Occupied(principal) = seat {
+                    Some(*principal)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         for _ in 0..num_hole_cards {
-            for user_principal in self.seats.iter() {
-                if let SeatStatus::Occupied(user_principal) = user_principal {
-                    let user_table_data =
-                        self.user_table_data
-                            .get_mut(user_principal)
-                            .ok_or_else(|| {
-                                trace_err!(TracedError::new(GameError::Other(
-                                    "Could not get users table data".to_string(),
-                                )))
-                            })?;
-                    if user_table_data.player_action != PlayerAction::SittingOut {
-                        user_table_data.cards.push(
-                            self.deck.deal().ok_or_else(|| {
-                                trace_err!(TracedError::new(GameError::NoCardsLeft))
-                            })?,
-                        );
+            for user_principal in &occupied_principals {
+                // Check if player is sitting out
+                let is_sitting_out = self
+                    .user_table_data
+                    .get(user_principal)
+                    .map(|data| data.player_action == PlayerAction::SittingOut)
+                    .unwrap_or(true);
+
+                if !is_sitting_out {
+                    let card = self
+                        .deck
+                        .deal()
+                        .ok_or_else(|| trace_err!(TracedError::new(GameError::NoCardsLeft)))?;
+                    // Update card provenance: this card was dealt to this player at Opening stage
+                    self.update_card_provenance(card, Some(*user_principal), DealStage::Opening);
+                    // Now add card to user's hand
+                    if let Some(user_table_data) = self.user_table_data.get_mut(user_principal) {
+                        user_table_data.cards.push(card);
                     }
                 }
             }
@@ -165,11 +246,13 @@ impl Table {
     ///
     /// - [`GameError::NoCardsLeft`] if there are no cards left in the deck
     fn deal_card(&mut self) -> Result<(), TracedError<GameError>> {
-        self.community_cards.push(
-            self.deck
-                .deal()
-                .ok_or_else(|| trace_err!(TracedError::new(GameError::NoCardsLeft)))?,
-        );
+        let card = self
+            .deck
+            .deal()
+            .ok_or_else(|| trace_err!(TracedError::new(GameError::NoCardsLeft)))?;
+        // Update card provenance: community cards have no owner (None) and are dealt at current stage
+        self.update_card_provenance(card, None, self.deal_stage);
+        self.community_cards.push(card);
         Ok(())
     }
 

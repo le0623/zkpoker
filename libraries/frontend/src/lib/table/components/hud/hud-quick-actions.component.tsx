@@ -70,7 +70,7 @@ export const HUDQuickActionsComponent = memo<HUDQuickActionsComponentProps>(({ q
       initial="hidden"
       animate="visible"
       exit="hidden"
-      className="flex flex-row justify-center items-center mt-3 gap-2 whitespace-nowrap px-4 relative"
+      className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative"
     >
       <div className='absolute inset-3 bg-black blur-2xl opacity-30' />
       {quickActions.map(([amount, label]) => (

@@ -160,6 +160,9 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
         const potAfterCall = potBeforeLastBet + lastBet + amountToCall;
         const potRaiseTo = callValue + potAfterCall;
         
+        // 3/4 pot raise: call + (pot after call * 3 / 4)
+        const threeQuarterPotRaiseTo = callValue + (potAfterCall * 3n / 4n);
+        
         // Half pot raise: call + (pot after call / 2)
         const halfPotRaiseTo = callValue + (potAfterCall / 2n);
         
@@ -170,14 +173,20 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
         if (potRaiseTo > currentBet && getPrice(potRaiseTo) <= tableUser.balance) {
           _quickActions.push([potRaiseTo, "Pot"]);
         }
+        // 3/4 Pot
+        if (threeQuarterPotRaiseTo > currentBet && threeQuarterPotRaiseTo < potRaiseTo && getPrice(threeQuarterPotRaiseTo) <= tableUser.balance) {
+          _quickActions.push([threeQuarterPotRaiseTo, "3/4 Pot"]);
+        }
         // 1/2 Pot
         if (halfPotRaiseTo > currentBet && halfPotRaiseTo < potRaiseTo && getPrice(halfPotRaiseTo) <= tableUser.balance) {
           _quickActions.push([halfPotRaiseTo, "1/2 Pot"]);
         }
+       
         // Min raise
         if (
           minRaiseTo > currentBet &&
           minRaiseTo !== potRaiseTo &&
+          minRaiseTo !== threeQuarterPotRaiseTo &&
           minRaiseTo !== halfPotRaiseTo &&
           minRaiseTo <= potRaiseTo &&
           getPrice(minRaiseTo) <= tableUser.balance
@@ -205,9 +214,15 @@ export const ProvideHUDBettingContext = memo<{ children: ReactNode }>(
           potToValue > _quickActions[0][0]
         ) {
           _quickActions.push([potToValue, "Pot"]);
+          const threeQuarterPotToValue = getRaiseToFromDelta(table.pot * 3n / 4n);
+          if (threeQuarterPotToValue > _quickActions[0][0])
+            _quickActions.push([threeQuarterPotToValue, "3/4 Pot"]);
           const halfPotToValue = getRaiseToFromDelta(table.pot / 2n);
           if (halfPotToValue > _quickActions[0][0])
             _quickActions.push([halfPotToValue, "1/2 Pot"]);
+          const oneThirdPotToValue = getRaiseToFromDelta(table.pot / 3n);
+          if (oneThirdPotToValue > _quickActions[0][0])
+            _quickActions.push([oneThirdPotToValue, "33%"]);
         }
 
         _quickActions = _quickActions.filter(

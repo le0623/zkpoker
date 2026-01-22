@@ -21,8 +21,7 @@
   max-width: 64rem;
   width: 100%;
   max-height: 90vh;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden; /* Prevent scrolling on container */
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
@@ -35,13 +34,11 @@
   align-items: center;
   padding: 1.5rem;
   border-bottom: 1px solid #374151;
-  position: sticky;
-  top: 0;
   background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
   z-index: 10;
   border-top-left-radius: 1rem;
   border-top-right-radius: 1rem;
-  flex-shrink: 0;
+  flex-shrink: 0; /* Keep header fixed size */
 }
 
 .rng-dashboard-header h2 {
@@ -66,9 +63,13 @@
   color: #ffffff;
 }
 
-/* Content */
+/* Content - Scrollable area */
 .rng-dashboard-content {
   padding: 1.5rem;
+  overflow-y: auto; /* Add scrollbar here */
+  overflow-x: hidden;
+  flex: 1; /* Take remaining space */
+  min-height: 0; /* Important for flex scrolling */
 }
 
 /* Panels */
@@ -190,7 +191,231 @@
   line-height: 1.4;
 }
 
-/* Deck Grid */
+/* Two-column layout for RNG deck panel */
+.rng-deck-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+/* Left Column: Card Groups */
+.card-groups-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: 40rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.card-group {
+  background-color: #111827;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  border: 1px solid #374151;
+}
+
+.card-group-title {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem 0;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #374151;
+}
+
+.card-group-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Increased gap for hole cards */
+.hole-cards-grid {
+  gap: 1.75rem; /* 0.75rem + 10px ≈ 1.75rem */
+}
+
+.card-group-empty {
+  color: #6b7280;
+  font-size: 0.875rem;
+  font-style: italic;
+  padding: 0.5rem;
+}
+
+/* Other Players Cards - Grouped by player */
+.other-players-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.player-cards-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.player-cards-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #374151;
+}
+
+.player-seat {
+  color: #6366f1; /* Indigo for seat number */
+  font-weight: 700;
+}
+
+.player-separator {
+  color: #6b7280;
+}
+
+.player-name {
+  color: #d1d5db; /* Light gray for username */
+  font-weight: 500;
+}
+
+/* Right Column: Hash List */
+.hash-list-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #111827;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  max-height: 40rem;
+  overflow: hidden;
+}
+
+.hash-list-title {
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0;
+  padding: 1rem;
+  border-bottom: 1px solid #374151;
+  background-color: #1f2937;
+  flex-shrink: 0;
+}
+
+.hash-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5rem;
+  gap: 0.25rem;
+}
+
+.hash-list-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  transition: all 0.3s ease;
+  cursor: default;
+  position: relative;
+  background-color: #1f2937;
+  border: 1px solid transparent;
+}
+
+.hash-list-item:hover {
+  background-color: #374151;
+}
+
+.hash-list-item.highlighted {
+  background-color: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  border-width: 2px;
+  animation: lightningPulse 0.6s ease-in-out;
+  transform: scale(1.02);
+  z-index: 10;
+}
+
+.hash-list-item.revealed {
+  border-left: 3px solid #10b981;
+}
+
+.hash-position {
+  color: #9ca3af;
+  font-weight: 600;
+  min-width: 2.5rem;
+  text-align: right;
+  font-size: 0.75rem;
+}
+
+.hash-list-item.highlighted .hash-position {
+  color: #3b82f6;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.hash-value {
+  color: #6b7280;
+  font-weight: 500;
+  flex: 1;
+  word-break: break-all;
+  font-size: 0.75rem;
+}
+
+.hash-list-item.highlighted .hash-value {
+  color: #60a5fa;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.hash-list-item.revealed .hash-value {
+  color: #34d399;
+}
+
+.lightning-effect {
+  position: absolute;
+  right: 0.5rem;
+  font-size: 1.25rem;
+  animation: lightningFlash 0.6s ease-in-out;
+  filter: drop-shadow(0 0 4px #fbbf24);
+}
+
+@keyframes lightningPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(59, 130, 246, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+@keyframes lightningFlash {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  25% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+  75% {
+    opacity: 0.5;
+    transform: scale(0.9);
+  }
+}
+
+/* Deck Grid (legacy - kept for compatibility) */
 .deck-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
@@ -224,7 +449,7 @@
 
 .card-item-wrapper.hidden {
   opacity: 0.8;
-  cursor: default;
+  cursor: pointer; /* Allow clicking to highlight hash */
 }
 
 /* Card Display Container */
@@ -406,7 +631,7 @@
 .card-type-badge {
   position: absolute;
   top: -6px;
-  left: -6px;
+  left: -10px; /* Moved left a little */
   background-color: #374151;
   color: #ffffff;
   font-size: 0.5rem;
@@ -768,6 +993,17 @@
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .rng-deck-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .hash-list-container {
+    max-height: 20rem;
+  }
+}
+
 @media (max-width: 640px) {
   .rng-dashboard-container {
     border-radius: 0;
@@ -787,6 +1023,19 @@
     padding: 1rem;
   }
 
+  .rng-deck-layout {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .card-groups-container {
+    max-height: 25rem;
+  }
+
+  .hash-list-container {
+    max-height: 15rem;
+  }
+
   .deck-grid {
     grid-template-columns: repeat(auto-fill, minmax(50px, 1fr));
     max-height: 20rem;
@@ -801,27 +1050,44 @@
   .card-placeholder {
     font-size: 0.75rem;
   }
+
+  .hash-list-item {
+    font-size: 0.625rem;
+    padding: 0.375rem 0.5rem;
+  }
+
+  .hash-position {
+    min-width: 2rem;
+  }
 }
 
-/* Scrollbar Styling */
-.rng-dashboard-container::-webkit-scrollbar,
-.deck-grid::-webkit-scrollbar {
+/* Scrollbar Styling - Consistent across all scrollable areas */
+.rng-dashboard-content::-webkit-scrollbar,
+.deck-grid::-webkit-scrollbar,
+.card-groups-container::-webkit-scrollbar,
+.hash-list::-webkit-scrollbar {
   width: 8px;
 }
 
-.rng-dashboard-container::-webkit-scrollbar-track,
-.deck-grid::-webkit-scrollbar-track {
+.rng-dashboard-content::-webkit-scrollbar-track,
+.deck-grid::-webkit-scrollbar-track,
+.card-groups-container::-webkit-scrollbar-track,
+.hash-list::-webkit-scrollbar-track {
   background: #111827;
 }
 
-.rng-dashboard-container::-webkit-scrollbar-thumb,
-.deck-grid::-webkit-scrollbar-thumb {
+.rng-dashboard-content::-webkit-scrollbar-thumb,
+.deck-grid::-webkit-scrollbar-thumb,
+.card-groups-container::-webkit-scrollbar-thumb,
+.hash-list::-webkit-scrollbar-thumb {
   background: #374151;
   border-radius: 4px;
 }
 
-.rng-dashboard-container::-webkit-scrollbar-thumb:hover,
-.deck-grid::-webkit-scrollbar-thumb:hover {
+.rng-dashboard-content::-webkit-scrollbar-thumb:hover,
+.deck-grid::-webkit-scrollbar-thumb:hover,
+.card-groups-container::-webkit-scrollbar-thumb:hover,
+.hash-list::-webkit-scrollbar-thumb:hover {
   background: #4b5563;
 }
 

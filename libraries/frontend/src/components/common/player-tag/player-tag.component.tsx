@@ -133,7 +133,7 @@ export const PlayerTag = memo<PlayerTagProps>(
     const { animatePots } = useTableUIContext();
     const { table } = useTable();
     const roundId = table?.round_ticker;
-    
+
     // Calculate hashes for visible cards (only for isSelf cards)
     const cardHashes = useCardHashes(isSelf && cards ? cards : [], roundId);
 
@@ -162,6 +162,22 @@ export const PlayerTag = memo<PlayerTagProps>(
       if ("Checked" in playerAction) return "Checked";
       return "";
     }, [playerAction]);
+
+    // Calculate remaining time countdown (reverse: 30, 29, 28, ..., 0)
+    const remainingTime = useMemo(() => {
+      if (turnProgress === undefined || !table?.config?.timer_duration) return null;
+      const totalSeconds = table.config.timer_duration;
+      // turnProgress is already the remainder (1 = all time remaining, 0 = no time remaining)
+      // So remaining seconds = totalSeconds * turnProgress
+      const remainingSeconds = Math.floor(totalSeconds * turnProgress);
+      // Clamp to 0 minimum
+      return Math.max(0, remainingSeconds);
+    }, [turnProgress, table?.config?.timer_duration]);
+
+    // Check if in warning zone (5, 4, 3, 2, 1, 0)
+    const isWarning = useMemo(() => {
+      return remainingTime !== null && remainingTime <= 5;
+    }, [remainingTime]);
 
     return (
       <div className="z-1">
@@ -209,8 +225,7 @@ export const PlayerTag = memo<PlayerTagProps>(
               )}
               <Interactable
                 key="player-tag"
-                className={classNames("flex flex-row items-center rounded-full grow", {
-                  "scale-150": !animatePots && turnProgress !== undefined,
+                className={classNames("flex flex-row items-center rounded-full grow relative", {
                   [turnProgress === undefined ? "py-2.5 pl-2.5" : "p-1.5"]:
                     animatePots,
                   "min-w-[123px]": isSelf && cards && animatePots,
@@ -232,7 +247,7 @@ export const PlayerTag = memo<PlayerTagProps>(
                     !animatePots
                       ? "medium"
                       : turnProgress !== undefined
-                        ? "big"
+                        ? "medium"
                         : "small"
                   }
                   avatar={avatar}
@@ -248,6 +263,35 @@ export const PlayerTag = memo<PlayerTagProps>(
                       <CurrencyComponent forceFlex currencyValue={balance} size="small" className='flex!' currencyType={currency} />
                     </div>
                   </div>
+                )}
+                {/* Countdown timer at bottom right */}
+                {remainingTime !== null && (
+                  <motion.div
+                    className={classNames(
+                      "absolute bottom-0 right-0 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center -mb-1 -mr-1 z-10 border-2",
+                      isWarning ? "" : "bg-yellow-500 text-white border-yellow-500"
+                    )}
+                    animate={
+                      isWarning
+                        ? {
+                          backgroundColor: ["#eab308", "#ef4444"],
+                          color: ["#ffffff", "#ffffff"],
+                          borderColor: ["#eab308", "#ef4444"],
+                        }
+                        : {
+                          backgroundColor: "#eab308",
+                          color: "#ffffff",
+                          borderColor: "#eab308",
+                        }
+                    }
+                    transition={{
+                      duration: 0.5,
+                      repeat: isWarning ? Infinity : 0,
+                      ease: "easeInOut",
+                    }}
+                  >
+                    {remainingTime}
+                  </motion.div>
                 )}
               </Interactable>
 

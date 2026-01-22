@@ -25,7 +25,10 @@ use table::{
                 table::{BigBlind, SmallBlind, Table, TableConfig, TableId, TableType},
                 types::{BetType, CurrencyType, DealStage, Notification, PlayerAction, SeatStatus},
             },
-            types::{CardProvenance, PublicTable, QueueItem, RngMetadata, RngStats, TableStatus},
+            types::{
+                CardProvenance, PlayerCardOwnership, PublicTable, QueueItem, RngMetadata, RngStats,
+                TableStatus,
+            },
             utils::rank_hand,
         },
     },
@@ -64,6 +67,10 @@ lazy_static! {
         Principal::from_text("uyxh5-bi3za-gxbfs-op3gj-ere73-a6jhv-5jky3-zawef-b5r2s-k26un-sae")
             .unwrap(),
         Principal::from_text("w3kjy-pitqg-dvab7-tb57q-63gnd-di4vo-loiiy-s6zm2-gqcmw-ixliz-aae")
+            .unwrap(),
+        Principal::from_text("tcuxo-b5b4t-vxwo7-mwgxi-vb4ig-zuux4-jmvru-fjocv-4uxuz-7yo4v-hqe")
+            .unwrap(),
+        Principal::from_text("2hbym-ivof6-l2yyh-zgu62-fqgf3-nvtlj-edso2-ebahf-p5j5c-2p2eb-lae")
             .unwrap(),
     ];
 }
@@ -356,6 +363,128 @@ fn get_card_provenance_by_round_id(
     provenance.sort_by_key(|p| p.shuffled_position);
 
     Ok(provenance)
+}
+
+/// Get other players' card ownership info for RNG dashboard
+/// Returns seat numbers and card positions for all players except caller
+/// Does NOT reveal card values - only ownership information for transparency
+
+/// # Edge Cases Handled
+/// - Players sitting out but still at table
+/// - Players queued for next round
+/// - Round transitions and rejoining players
+/// - Historical rounds where players may have left
+#[ic_cdk::query]
+fn get_other_players_card_ownership(
+    round_id: Option<u64>,
+) -> Result<Vec<PlayerCardOwnership>, TableError> {
+    let table = TABLE.lock().map_err(|_| TableError::LockError)?;
+    let table = table.as_ref().ok_or(TableError::TableNotFound)?;
+
+    let caller = user::user::WalletPrincipalId(ic_cdk::api::msg_caller());
+    let target_round = round_id.unwrap_or(table.round_ticker);
+
+    let mut seat_lookup: HashMap<user::user::WalletPrincipalId, u8> = HashMap::new();
+    for (seat_idx, seat) in table.seats.iter().enumerate() {
+        match seat {
+            SeatStatus::Occupied(principal) => {
+                seat_lookup.insert(*principal, seat_idx as u8);
+            }
+            SeatStatus::QueuedForNextRound(principal, _, _) => {
+                // Include queued players for round transitions
+                seat_lookup.insert(*principal, seat_idx as u8);
+            }
+            _ => {} // Empty and Reserved seats don't have players
+        }
+    }
+
+    // Build ownership map: principal -> (seat_number, Vec<shuffled_positions>)
+    let mut ownership_map: HashMap<user::user::WalletPrincipalId, (u8, Vec<u8>)> = HashMap::new();
+
+    // Track players who received cards but aren't in seat_lookup (edge case logging)
+    #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+    let mut orphaned_cards = 0;
+
+    // Iterate through card provenance once - O(n) where n = cards in round
+    for prov in table.card_provenance.values() {
+        // Skip cards from other rounds
+        if prov.round_id != target_round {
+            continue;
+        }
+
+        // Check if card was dealt to a player
+        if let Some(dealt_to) = prov.dealt_to {
+            // Skip current user (they already see their own cards)
+            if dealt_to == caller {
+                continue;
+            }
+
+            // Skip if dealt at non-Opening stage (community cards)
+            // Only include hole cards (dealt at Opening)
+            if let Some(stage) = prov.dealt_at_stage {
+                // Use match for more robust stage checking
+                match stage {
+                    DealStage::Opening => {
+                        // This is a hole card, process it
+                    }
+                    _ => {
+                        // Not a hole card, skip
+                        continue;
+                    }
+                }
+            } else {
+                // If no stage info, skip (not dealt yet or data incomplete)
+                continue;
+            }
+
+            // Get seat number for this player
+            if let Some(&seat_num) = seat_lookup.get(&dealt_to) {
+                // Add to ownership map
+                ownership_map
+                    .entry(dealt_to)
+                    .or_insert_with(|| (seat_num, Vec::new()))
+                    .1
+                    .push(prov.shuffled_position);
+            } else {
+                // Player received cards but is no longer at table
+                // This can happen for historical rounds or if player left mid-game
+                #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+                {
+                    orphaned_cards += 1;
+                }
+                // Skip this card as we can't determine seat number
+                // (for transparency, we only show players currently at the table)
+            }
+        }
+    }
+
+    #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+    if orphaned_cards > 0 {
+        ic_cdk::println!(
+            "ℹ️ Round {}: {} cards dealt to players no longer at table",
+            target_round,
+            orphaned_cards
+        );
+    }
+
+    // Convert to response Vec - maintains order consistency
+    let mut result: Vec<PlayerCardOwnership> = ownership_map
+        .into_iter()
+        .map(|(principal, (seat_number, mut shuffled_positions))| {
+            // Sort positions for consistent ordering
+            shuffled_positions.sort();
+            PlayerCardOwnership {
+                principal,
+                seat_number,
+                shuffled_positions,
+            }
+        })
+        .collect();
+
+    // Sort by seat number for predictable frontend display
+    result.sort_by_key(|p| p.seat_number);
+
+    Ok(result)
 }
 
 /// Get card provenance history for recent rounds (for historical transparency)

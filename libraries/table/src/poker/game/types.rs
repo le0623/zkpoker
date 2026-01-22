@@ -553,6 +553,21 @@ impl Default for CardProvenance {
     }
 }
 
+/// Player card ownership information for RNG transparency
+/// Provides seat number and card positions without revealing card values
+/// Used to display other players' cards in RNG dashboard
+#[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
+pub struct PlayerCardOwnership {
+    /// Player's principal ID
+    pub principal: WalletPrincipalId,
+    
+    /// Seat number (0-indexed)
+    pub seat_number: u8,
+    
+    /// Shuffled positions of cards dealt to this player
+    pub shuffled_positions: Vec<u8>,
+}
+
 /// Statistics about RNG transparency data
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 pub struct RngStats {

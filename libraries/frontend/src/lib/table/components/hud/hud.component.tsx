@@ -105,6 +105,33 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
       }
     }, [isDragging, handleMouseMove, handleMouseUp]);
 
+    // Calculate step increment based on currency type
+    const stepIncrement = useMemo(() => {
+      if (meta.decimals === 0) return 1n;
+      // For currencies with decimals, use 0.1 of the base unit, or 1 if that's too small
+      // Convert 0.1 to bigint: 0.1 * 10^decimals
+      if (meta.renderedDecimalPlaces !== undefined && meta.renderedDecimalPlaces > 0) {
+        const stepValue = meta.renderedDecimalPlaces < 1 ? 0.1 : 1;
+        return BigInt(Math.round(stepValue * Math.pow(10, meta.decimals)));
+      }
+      // Default to 0.01 * 10^decimals (0.01 converted to bigint)
+      return BigInt(Math.round(0.01 * Math.pow(10, meta.decimals)));
+    }, [meta.decimals, meta.renderedDecimalPlaces]);
+
+    const handleDecrement = useCallback(() => {
+      const decremented = raise.value > stepIncrement
+        ? raise.value - stepIncrement
+        : raise.min!;
+      const newValue = decremented >= raise.min! ? decremented : raise.min!;
+      raise.change(newValue);
+    }, [raise, stepIncrement]);
+
+    const handleIncrement = useCallback(() => {
+      const incremented = raise.value + stepIncrement;
+      const newValue = incremented <= raise.max! ? incremented : raise.max!;
+      raise.change(newValue);
+    }, [raise, stepIncrement]);
+
     return (
       <motion.div
         variants={{
@@ -122,15 +149,20 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
         initial="hidden"
         animate="visible"
         exit="hidden"
-        className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11 flex-wrap"
+        className="flex flex-col justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11"
       >
         <div className="absolute inset-3 bg-black blur-2xl opacity-30" />
-        <div className="flex items-center justify-center gap-1 relative z-10">
+
+        {/* Quick Actions on top line */}
+        <div className="relative z-10 w-full flex justify-center">
           <HUDQuickActionsComponent
             quickActions={raise.quickActions}
             onChange={raise.change}
             currentValue={raise.value}
           />
+        </div>
+
+        <div className="flex items-center justify-center gap-2 relative z-10">
           <CurrencyInputComponent
             currencyType={currencyType}
             value={raise.value}
@@ -142,34 +174,65 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
             hideMinQuickAction
           />
           {raise.min !== undefined && raise.max !== undefined && (
-            <div className="flex flex-col gap-1 min-w-[120px]">
-              {/* Interactive Slider bar - expanded clickable area */}
-              <div
-                id="raise-slider"
-                className="relative h-12 cursor-pointer flex items-center px-6"
-                onMouseDown={handleMouseDown}
+            <>
+              {/* Decrement button */}
+              <button
+                onClick={handleDecrement}
+                disabled={raise.value <= raise.min}
+                className={classNames(
+                  "w-10 h-10 rounded-xl bg-neutral-400 bg-opacity-70 flex items-center justify-center",
+                  "text-white text-xl font-bold transition-all duration-200",
+                  "hover:bg-opacity-90 active:scale-95",
+                  raise.value <= raise.min && "opacity-50 cursor-not-allowed"
+                )}
               >
-                {/* Visual track */}
-                <div className="absolute left-6 right-6 h-2 bg-neutral-400 bg-opacity-70 rounded-full" />
+                -
+              </button>
 
-                {/* Chip indicator - positioned relative to track */}
-                <img
-                  src="/icons/chip-black.svg"
-                  alt="slider"
-                  className={`absolute top-1/2 -translate-y-1/2 w-12 h-12 pointer-events-none ${isDragging ? "scale-110" : ""} transition-all duration-150 z-10`}
-                  style={{
-                    left: `calc((100% - 48px) * ${Math.min(
-                      1,
-                      Math.max(
-                        0,
-                        (Number(raise.value) - Number(raise.min)) /
+              {/* Slider bar - increased length */}
+              <div className="flex flex-col gap-1 w-[250px]">
+                {/* Interactive Slider bar - expanded clickable area */}
+                <div
+                  id="raise-slider"
+                  className="relative h-12 cursor-pointer flex items-center px-6"
+                  onMouseDown={handleMouseDown}
+                >
+                  {/* Visual track */}
+                  <div className="absolute left-6 right-6 h-2 bg-neutral-400 bg-opacity-70 rounded-full" />
+
+                  {/* Chip indicator - positioned relative to track */}
+                  <img
+                    src="/icons/chip-black.svg"
+                    alt="slider"
+                    className={`absolute top-1/2 -translate-y-1/2 w-12 h-12 pointer-events-none ${isDragging ? "scale-110" : ""} transition-all duration-150 z-10`}
+                    style={{
+                      left: `calc((100% - 48px) * ${Math.min(
+                        1,
+                        Math.max(
+                          0,
+                          (Number(raise.value) - Number(raise.min)) /
                           (Number(raise.max) - Number(raise.min))
-                      )
-                    )})`,
-                  }}
-                />
+                        )
+                      )})`,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
+
+              {/* Increment button */}
+              <button
+                onClick={handleIncrement}
+                disabled={raise.value >= raise.max}
+                className={classNames(
+                  "w-10 h-10 rounded-xl bg-neutral-400 bg-opacity-70 flex items-center justify-center",
+                  "text-white text-xl font-bold transition-all duration-200",
+                  "hover:bg-opacity-90 active:scale-95",
+                  raise.value >= raise.max && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                +
+              </button>
+            </>
           )}
         </div>
       </motion.div>
@@ -223,62 +286,7 @@ export const HUDComponent = memo<{
             </HUDBettingConsumer>
 
             <div className="relative flex items-center flex-col">
-              <div className="flex flex-row absolute bottom-full z-0 translate-y-2 group">
-                <AnimatePresence>
-                  {user?.data?.cards.map((card, i) => (
-                    <motion.div
-                      variants={{
-                        visible: {
-                          y: 16,
-                          rotate: 0,
-                          scale: 1,
-                          opacity: 1,
-                        },
-                        hidden: {
-                          y: 0,
-                          rotate: i === 0 ? -2 : 2,
-                          scale: 0.9,
-                          opacity: 0,
-                        },
-                        turn: {
-                          y: -32,
-                          rotate: i === 0 ? -2 : 2,
-                          scale: 1,
-                          opacity: 1,
-                        },
-                      }}
-                      initial="hidden"
-                      animate={
-                        isJoined &&
-                        table.current_player_index === userIndex &&
-                        isOngoing
-                          ? "turn"
-                          : "visible"
-                      }
-                      exit="hidden"
-                      key={i}
-                      className={classNames({
-                        [isJoined &&
-                        table.current_player_index === userIndex &&
-                        isOngoing
-                          ? "-ml-6"
-                          : "-ml-4"]: i > 0,
-                      })}
-                    >
-                      <CardComponent
-                        card={card}
-                        size={
-                          isJoined &&
-                          table.current_player_index === userIndex &&
-                          isOngoing
-                            ? "medium"
-                            : "small"
-                        }
-                      />
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </div>
+              {/* Cards are now displayed on the table, not in HUD */}
 
               <div className="material rounded-[12px] lg:rounded-[24px] z-10 relative gap-2 flex flex-col items-center justify-center p-2 lg:p-3 lg:whitespace-nowrap w-full lg:w-auto ">
                 <div className="absolute inset-0 rounded-[12px] lg:rounded-[24px] overflow-hidden">

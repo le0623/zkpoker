@@ -115,6 +115,7 @@ lazy_static! {
         Principal::from_text("uyxh5-bi3za-gxbfs-op3gj-ere73-a6jhv-5jky3-zawef-b5r2s-k26un-sae")
             .unwrap(),
         Principal::from_text("w3kjy-pitqg-dvab7-tb57q-63gnd-di4vo-loiiy-s6zm2-gqcmw-ixliz-aae").unwrap(),
+        Principal::from_text("tcuxo-b5b4t-vxwo7-mwgxi-vb4ig-zuux4-jmvru-fjocv-4uxuz-7yo4v-hqe").unwrap(),
     ];
     static ref TOURNAMENT_CANISTER_WASM: &'static [u8] =
         include_bytes!("../../../target/wasm32-unknown-unknown/release/tournament_canister.wasm");

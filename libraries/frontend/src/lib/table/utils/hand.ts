@@ -11,8 +11,9 @@ export const BuildHand = (
   data?: Pick<UserTableData, "cards" | "player_action">,
   currentViewerPrincipal?: string // Current viewer's principal to check if they're in showdown
 ): Card[] => {
-  // Hide the cards for your own user
-  if (!data?.cards || isSelf) return [];
+  // For self, return cards if they exist (to show on table like other players)
+  if (!data?.cards) return [];
+  if (isSelf) return data.cards;
   if ("Fresh" in table.deal_stage) return data.cards;
 
   // Determine number of cards based on game type

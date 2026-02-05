@@ -86,6 +86,10 @@ lazy_static! {
         Principal::from_text(rake_constants::RAKE_WALLET_ADDRESS_PRINCIPAL).unwrap();
     static ref RAKE_WALLET_ACCOUNT_ID: String = rake_constants::RAKE_WALLET_ACCOUNT_ID.to_string();
     static ref TRANSACTION_STATE: Mutex<TransactionState> = Mutex::new(TransactionState::new());
+    static ref TABLE_CANISTER_POOL: Mutex<Vec<Principal>> = Mutex::new(Vec::new());
+    static ref POOL_SIZE_TARGET: usize = 5; // Keep 5 ready canisters
+    static ref POOL_REFILL_THRESHOLD: usize = 2; // Refill when below 2
+    static ref POOL_MAX_SIZE: usize = 10; // Maximum pool size
 }
 
 #[ic_cdk::init]
@@ -105,16 +109,131 @@ fn get_account_number() -> Result<Option<String>, TableIndexError> {
     Ok(Some(canister_state.account_identifier.to_string()))
 }
 
+#[ic_cdk::query]
+fn get_pool_status() -> (usize, usize, usize) {
+    let pool_size = TABLE_CANISTER_POOL
+        .lock()
+        .map(|p| p.len())
+        .unwrap_or(0);
+    (*POOL_SIZE_TARGET, *POOL_REFILL_THRESHOLD, pool_size)
+}
+
+#[ic_cdk::update]
+async fn maintain_canister_pool() -> Result<(), TableIndexError> {
+    handle_cycle_check().await?;
+    
+    let pool_size = {
+        TABLE_CANISTER_POOL
+            .lock()
+            .map_err(|_| TableIndexError::LockError)?
+            .len()
+    };
+
+    if pool_size < *POOL_REFILL_THRESHOLD {
+        ic_cdk::println!("Pool size {} is below threshold {}, refilling...", pool_size, *POOL_REFILL_THRESHOLD);
+        
+        let controllers = CONTROLLER_PRINCIPALS.clone();
+        let wasm_module = TABLE_CANISTER_WASM.to_vec();
+        
+        // Calculate how many we need to create
+        let needed = (*POOL_SIZE_TARGET - pool_size).min(*POOL_MAX_SIZE - pool_size);
+        
+        if needed == 0 {
+            return Ok(());
+        }
+        
+        // Create multiple canisters in parallel
+        let mut futures = Vec::new();
+        
+        for _ in 0..needed {
+            let controllers_clone = controllers.clone();
+            let wasm_clone = wasm_module.clone();
+            futures.push(async move {
+                match create_canister_wrapper(controllers_clone, None).await {
+                    Ok(canister) => {
+                        match install_wasm_code(canister, wasm_clone).await {
+                            Ok(_) => {
+                                ic_cdk::println!("Successfully pre-installed WASM in canister {}", canister);
+                                Ok(canister)
+                            }
+                            Err(e) => {
+                                ic_cdk::println!("Failed to install WASM in canister {}: {:?}", canister, e);
+                                Err(TableIndexError::CanisterCallError(format!("Install failed: {:?}", e)))
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        ic_cdk::println!("Failed to create canister: {:?}", e);
+                        Err(TableIndexError::CanisterCallError(format!("Create failed: {:?}", e)))
+                    }
+                }
+            });
+        }
+        
+        // Wait for all to complete
+        let results = join_all(futures).await;
+        
+        let mut pool = TABLE_CANISTER_POOL
+            .lock()
+            .map_err(|_| TableIndexError::LockError)?;
+            
+        let mut success_count = 0;
+        for result in results {
+            match result {
+                Ok(canister) => {
+                    pool.push(canister);
+                    success_count += 1;
+                }
+                Err(e) => {
+                    ic_cdk::println!("Pool refill error: {:?}", e);
+                }
+            }
+        }
+        
+        ic_cdk::println!("Pool refilled: {} new canisters added (target: {})", success_count, needed);
+    }
+    
+    Ok(())
+}
+
 #[ic_cdk::update]
 async fn create_table(
     config: TableConfig,
     wallet_principal_id: Option<WalletPrincipalId>,
 ) -> Result<PublicTable, TableIndexError> {
     handle_cycle_check().await?;
-    let controllers = CONTROLLER_PRINCIPALS.clone();
-    let wasm_module = TABLE_CANISTER_WASM.to_vec();
-    let table_canister_principal = create_canister_wrapper(controllers, None).await?;
-    install_wasm_code(table_canister_principal, wasm_module).await?;
+    
+    // Get canister from pool OR create new (fallback)
+    let table_canister_principal = {
+        let mut pool = TABLE_CANISTER_POOL
+            .lock()
+            .map_err(|_| TableIndexError::LockError)?;
+            
+        if let Some(canister) = pool.pop() {
+            ic_cdk::println!("Using pre-installed canister from pool: {}", canister);
+            // Use pre-installed canister (FAST!)
+            drop(pool); // Release lock before async operations
+            canister
+        } else {
+            ic_cdk::println!("Pool empty, creating new canister...");
+            // Fallback: create new (slow, but works)
+            drop(pool); // Release lock before async operations
+            let controllers = CONTROLLER_PRINCIPALS.clone();
+            let wasm_module = TABLE_CANISTER_WASM.to_vec();
+            let canister = create_canister_wrapper(controllers, None).await?;
+            install_wasm_code(canister, wasm_module).await?;
+            canister
+        }
+    };
+    
+    // Trigger pool refill in background (don't wait for it)
+    let pool_refill_future = maintain_canister_pool();
+    ic_cdk::futures::spawn(async {
+        if let Err(e) = pool_refill_future.await {
+            ic_cdk::println!("Background pool refill failed: {:?}", e);
+        }
+    });
+    
     let table_canister_principal = TableId(table_canister_principal);
     let raw_bytes = ic_cdk::management_canister::raw_rand().await;
     let raw_bytes = raw_bytes.map_err(|e| {

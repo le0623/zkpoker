@@ -4,8 +4,8 @@ import { memo, ReactNode, useState } from 'react';
 
 import { Interactable } from '@zk-game-dao/ui';
 
-export const HUDQuickActionComponent = memo<{ 
-  label: ReactNode; 
+export const HUDQuickActionComponent = memo<{
+  label: ReactNode;
   onClick(): void;
   isSelected: boolean;
   currentValue: bigint;
@@ -16,10 +16,10 @@ export const HUDQuickActionComponent = memo<{
       onClick={onClick}
       className={classNames(
         "flex material leading-none transition-all duration-200 relative",
-        "text-white type-button-2 p-3 rounded-[14.4px]",
+        "text-white type-button-2 p-2 rounded-sm",
         "active:scale-95 hover:scale-105",
-        isSelected 
-          ? "bg-material-main-3 bg-opacity-100 shadow-lg ring-2 ring-white ring-opacity-50" 
+        isSelected
+          ? "bg-material-main-3 bg-opacity-100 shadow-lg ring-2 ring-white ring-opacity-50"
           : "bg-neutral-400 bg-opacity-70 hover:bg-opacity-90",
         currentValue === targetValue && !isSelected && "ring-1 ring-white ring-opacity-30"
       )}
@@ -70,9 +70,8 @@ export const HUDQuickActionsComponent = memo<HUDQuickActionsComponentProps>(({ q
       initial="hidden"
       animate="visible"
       exit="hidden"
-      className="flex flex-row justify-center items-center gap-2 whitespace-nowrap px-4 relative"
+      className="flex flex-row pt-4 justify-center items-center gap-1.5 whitespace-nowrap relative"
     >
-      <div className='absolute inset-3 bg-black blur-2xl opacity-30' />
       {quickActions.map(([amount, label]) => (
         <HUDQuickActionComponent
           key={label}
@@ -86,9 +85,9 @@ export const HUDQuickActionsComponent = memo<HUDQuickActionsComponentProps>(({ q
     </motion.div>
   );
 }, (prevProps, nextProps) => {
-  if (prevProps.quickActions.length !== nextProps.quickActions.length || 
-      prevProps.onChange !== nextProps.onChange ||
-      prevProps.currentValue !== nextProps.currentValue)
+  if (prevProps.quickActions.length !== nextProps.quickActions.length ||
+    prevProps.onChange !== nextProps.onChange ||
+    prevProps.currentValue !== nextProps.currentValue)
     return false;
 
   const sortedPrevActions = [...prevProps.quickActions].sort((a, b) => Number(a[0] - b[0]));

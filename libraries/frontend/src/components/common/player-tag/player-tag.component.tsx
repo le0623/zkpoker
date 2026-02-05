@@ -21,7 +21,7 @@ const PlayerActionComponent = memo<{ action: PlayerAction; onClose(): void }>(
     const { currencyType: currency } = useTable();
 
     useEffect(() => {
-      if ("Folded" in action || "AllIn" in action || "SittingOut" in action)
+      if ("AllIn" in action)
         return;
       const timeout = setTimeout(() => onClose(), 3000);
       return () => clearTimeout(timeout);
@@ -60,7 +60,7 @@ const PlayerActionComponent = memo<{ action: PlayerAction; onClose(): void }>(
     return (
       <motion.div
         className={classNames(
-          "material type-button-3 px-[14px] h-9 rounded-full flex justify-center items-center whitespace-nowrap",
+          "material type-button-2 px-2 h-6 rounded-sm flex justify-center items-center whitespace-nowrap",
           cls,
         )}
       >
@@ -97,6 +97,111 @@ const SlideIn = memo<
   </motion.div>
 ));
 SlideIn.displayName = "SlideIn";
+
+const Trapezoid = memo<{
+  width?: number;
+  height?: number;
+  slope?: number;
+  radius?: number;
+  fill?: string;
+  className?: string;
+  children?: React.ReactNode;
+  shouldBlink?: boolean;
+}>(({
+  width = 160,
+  height = 60,
+  slope = 10,
+  radius = 8,
+  fill = "#353535", // Tailwind gray-500
+  className,
+  children,
+  shouldBlink = false,
+}) => {
+  const w = width;
+  const h = height;
+  const p = slope;
+  const r = radius;
+
+  // Path for a rounded trapezoid (top narrower than bottom)
+  const d = `
+    M ${p + r},${h}
+    H ${w - p - r}
+    Q ${w - p},${h} ${w - p},${h - r}
+    L ${w},${r}
+    Q ${w},0 ${w - r},0
+    H ${r}
+    Q 0,0 0,${r}
+    L ${p},${h - r}
+    Q ${p},${h} ${p + r},${h}
+    Z
+  `;
+
+  // Neon color for blink (green neon)
+  const neonStroke = "#39ff14";
+  const neonGlow1 = "#39ff14";
+  const neonGlow2 = "#aaff77";
+
+  return (
+    <div
+      className={classNames('relative flex flex-col justify-center items-start', className)}
+      style={{ width: w, height: h, minWidth: w, minHeight: h, overflow: "visible" }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox={`0 0 ${w} ${h}`}
+        className='absolute top-0 left-0 w-full h-full pointer-events-none overflow-visible'
+        preserveAspectRatio="none"
+      >
+        {/* SVG filter for neon glow */}
+        <defs>
+          <filter id="neon-glow" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor={neonGlow1} floodOpacity="0.8" />
+            <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor={neonGlow2} floodOpacity="0.5" />
+            <feDropShadow dx="0" dy="0" stdDeviation="8" floodColor={neonGlow1} floodOpacity="0.5" />
+          </filter>
+        </defs>
+        <path d={d} fill={fill} />
+        {shouldBlink && (
+          <motion.path
+            d={d}
+            fill="none"
+            stroke={neonStroke}
+            strokeWidth="5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            filter="url(#neon-glow)"
+            style={{
+              // If not using animate, always visible neon
+              // But here we want a "blinking" neon
+              // Animate opacity for a flashing neon effect
+            }}
+            animate={{
+              opacity: [0, 1, 0],
+              // optional: scale could help exaggerate the glow if desired
+              // scale: [1, 1.02, 1]
+            }}
+            transition={{
+              duration: 1.8,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          />
+        )}
+      </svg>
+      <div
+        className="z-10 w-full h-full absolute top-0 left-0 flex flex-col justify-center items-center"
+        style={{
+          pointerEvents: "auto",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+});
+
+Trapezoid.displayName = "Trapezoid";
 
 export type PlayerTagProps = {
   turnProgress?: number;
@@ -163,6 +268,14 @@ export const PlayerTag = memo<PlayerTagProps>(
       return "";
     }, [playerAction]);
 
+    const cardMarginBottom = useMemo(() => {
+      const length = cards?.length ?? 0;
+      if (length === 2) return [0, 0]
+      if (length === 3) return [0, 4, 0]
+      if (length === 4) return [0, 4, 4, 0]
+      if (length === 5) return [0, 4, 5, 4, 0]
+    }, [cards]);
+
     // Calculate remaining time countdown (reverse: 30, 29, 28, ..., 0)
     const remainingTime = useMemo(() => {
       if (turnProgress === undefined || !table?.config?.timer_duration) return null;
@@ -191,108 +304,116 @@ export const PlayerTag = memo<PlayerTagProps>(
             )}
           >
             <AnimatePresence>
-              {animatePots && !!playerAction && !("None" in playerAction) && (
-                <SlideIn direction={direction} key="action">
-                  <PlayerActionComponent
-                    onClose={() => setPlayerAction(undefined)}
-                    action={playerAction}
-                  />
-                </SlideIn>
-              )}
-              {cards && (
-                <div className="flex flex-row -mb-2">
-                  {cards.map((card, index) => (
-                    <CardComponent
-                      key={index}
-                      card={card}
-                      hash={isSelf && cardHashes[index] ? cardHashes[index]! : undefined}
-                      size={
-                        !isSelf
-                          ? "microscopic"
-                          : "between-microscopic-and-small"
-                      }
-                      className={classNames("transform", {
-                        "-ml-[5px]": index > 0,
-                        [index === 0 ? "-rotate-[1deg]" : "rotate-[1deg]"]:
-                          animatePots,
-                        [index === 0
-                          ? "-rotate-[10deg] translate-x-1"
-                          : "rotate-[10deg] -translate-x-1"]: !animatePots,
-                      })}
-                    />
-                  ))}
-                </div>
-              )}
               <Interactable
                 key="player-tag"
-                className={classNames("flex flex-row items-center rounded-full grow relative", {
-                  [turnProgress === undefined ? "py-2.5 pl-2.5" : "p-1.5"]:
-                    animatePots,
-                  "min-w-[123px]": isSelf && cards && animatePots,
-                  "material gap-2.5 pr-5": animatePots,
-                  "transition-transform z-1": !animatePots,
-                },
-                  isSelf && [
-                    {
-                      'border-green-500 border-4': animatePots,
-                      'ring-green-500 border-transparent border-2 ring-3': !animatePots,
-                    }
-                  ]
+                className={classNames("flex flex-col items-center justify-center",
+                  {
+                    [turnProgress === undefined ? "py-2.5 pl-2.5" : "p-1.5"]:
+                      animatePots,
+                    "transition-transform z-1": !animatePots,
+                  },
                 )}
                 onClick={onClick}
               >
-                <AvatarComponent
-                  progress={turnProgress}
-                  size={
-                    !animatePots
-                      ? "medium"
-                      : turnProgress !== undefined
-                        ? "medium"
-                        : "small"
-                  }
-                  avatar={avatar}
-                  is_verified={is_verified}
-                  isDealer={isDealer && !animatePots}
-                />
-                {animatePots && (
-                  <div className="flex flex-col justify-between items-start gap-[2px] h-[30px]">
-                    <p className="type-button-2 whitespace-nowrap -mt-0.5">
-                      {user_name}
-                    </p>
-                    <div className='flex flex-row grow shrink-0 w-full pr-3'>
-                      <CurrencyComponent forceFlex currencyValue={balance} size="small" className='flex!' currencyType={currency} />
+                <div className="flex justify-center items-center relative -mb-5">
+                  <AvatarComponent
+                    size="big"
+                    avatar={avatar}
+                    is_verified={is_verified}
+                    isDealer={isDealer && !animatePots}
+                  />
+
+
+                  {cards && !("Folded" in (playerAction ?? {}) || "SittingOut" in (playerAction ?? {})) && (
+                    <div className="flex flex-row absolute bottom-2 z-10">
+                      {cards.map((card, index) => (
+                        <CardComponent
+                          key={index}
+                          card={card}
+                          hash={isSelf && cardHashes[index] ? cardHashes[index]! : undefined}
+                          size="small"
+                          className={classNames("transform", {
+                            "-ml-7": index > 0
+                          })}
+                          style={{
+                            transform: `rotate(${-10 + index * (20 / (cards.length - 1))}deg)`,
+                            marginBottom: cardMarginBottom?.[index] ?? 0,
+                            marginTop: 6 - (cardMarginBottom?.[index] ?? 0)
+                          }}
+                        />
+                      ))}
                     </div>
+                  )}
+                </div>
+                {animatePots && (
+                  <Trapezoid className='z-20 w-full relative' shouldBlink={remainingTime !== null}>
+                    <div className='w-full h-full flex flex-col items-center justify-center p-1 gap-1 px-2'>
+                      <p className="type-button-2 text-lg whitespace-nowrap text-white border-b  w-full text-center pb-2">
+                        {user_name}
+                      </p>
+                      <div className='pt-1'>
+                        <CurrencyComponent forceFlex currencyValue={balance} size="small" className='flex!' currencyType={currency} />
+                      </div>
+                    </div>
+                    <div className='absolute bottom-5 z-20'>
+                      {animatePots && !!playerAction && !("None" in playerAction) && (
+                        <SlideIn direction={direction} key="action">
+                          <PlayerActionComponent
+                            onClose={() => setPlayerAction(undefined)}
+                            action={playerAction}
+                          />
+                        </SlideIn>
+                      )}
+                    </div>
+                  </Trapezoid>
+                )}
+                {remainingTime !== null && (
+                  <div className="flex items-center w-full px-4 absolute bottom-0">
+                    <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden relative">
+                      <motion.div
+                        className={classNames(
+                          "h-full mr-2",
+                          isWarning ? "bg-red-500" : "bg-yellow-500"
+                        )}
+                        initial={{ width: "100%" }}
+                        animate={{
+                          width: `${(turnProgress ?? 0) * 100}%`,
+                          backgroundColor: isWarning ? "#ef4444" : "#eab308",
+                        }}
+                        transition={{
+                          duration: 0.1,
+                          ease: "linear",
+                        }}
+                      />
+                    </div>
+                    <motion.span
+                      className={classNames(
+                        "text-xs font-bold px-1.5 py-0.5 rounded whitespace-nowrap absolute right-0 z-20",
+                        isWarning ? "bg-red-500 text-white" : "bg-yellow-500 text-white"
+                      )}
+                      animate={
+                        isWarning
+                          ? {
+                            backgroundColor: ["#eab308", "#ef4444"],
+                            color: ["#ffffff", "#ffffff"],
+                          }
+                          : {
+                            backgroundColor: "#eab308",
+                            color: "#ffffff",
+                          }
+                      }
+                      transition={{
+                        duration: 0.5,
+                        repeat: isWarning ? Infinity : 0,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      {remainingTime}
+                    </motion.span>
                   </div>
                 )}
                 {/* Countdown timer at bottom right */}
-                {remainingTime !== null && (
-                  <motion.div
-                    className={classNames(
-                      "absolute bottom-0 right-0 text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center -mb-1 -mr-1 z-10 border-2",
-                      isWarning ? "" : "bg-yellow-500 text-white border-yellow-500"
-                    )}
-                    animate={
-                      isWarning
-                        ? {
-                          backgroundColor: ["#eab308", "#ef4444"],
-                          color: ["#ffffff", "#ffffff"],
-                          borderColor: ["#eab308", "#ef4444"],
-                        }
-                        : {
-                          backgroundColor: "#eab308",
-                          color: "#ffffff",
-                          borderColor: "#eab308",
-                        }
-                    }
-                    transition={{
-                      duration: 0.5,
-                      repeat: isWarning ? Infinity : 0,
-                      ease: "easeInOut",
-                    }}
-                  >
-                    {remainingTime}
-                  </motion.div>
-                )}
+
               </Interactable>
 
               {!animatePots && !!current_total_bet && (

@@ -151,38 +151,32 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
         exit="hidden"
         className="flex flex-col justify-center items-center gap-2 whitespace-nowrap px-4 relative z-11"
       >
-        <div className="absolute inset-3 bg-black blur-2xl opacity-30" />
-
-        {/* Quick Actions on top line */}
-        <div className="relative z-10 w-full flex justify-center">
+        <div className="flex items-center justify-center gap-2 relative z-10 w-full">
           <HUDQuickActionsComponent
             quickActions={raise.quickActions}
             onChange={raise.change}
             currentValue={raise.value}
           />
-        </div>
-
-        <div className="flex items-center justify-center gap-2 relative z-10">
           <CurrencyInputComponent
             currencyType={currencyType}
             value={raise.value}
             onChange={raise.change}
             min={raise.min}
             max={raise.max}
-            className="w-32 rounded-xl bg-neutral-400 bg-opacity-70"
+            className="rounded-sm w-48"
             hideMaxQuickAction
             hideMinQuickAction
           />
           {raise.min !== undefined && raise.max !== undefined && (
-            <>
+            <div className="flex flex-row items-center justify-center gap-1.5 w-full">
               {/* Decrement button */}
               <button
                 onClick={handleDecrement}
                 disabled={raise.value <= raise.min}
                 className={classNames(
-                  "w-10 h-10 rounded-xl bg-neutral-400 bg-opacity-70 flex items-center justify-center",
-                  "text-white text-xl font-bold transition-all duration-200",
-                  "hover:bg-opacity-90 active:scale-95",
+                  "material flex items-center justify-center",
+                  "text-white type-button-2 py-2 px-3 rounded-sm",
+                  "active:scale-95 hover:scale-105",
                   raise.value <= raise.min && "opacity-50 cursor-not-allowed"
                 )}
               >
@@ -190,15 +184,15 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
               </button>
 
               {/* Slider bar - increased length */}
-              <div className="flex flex-col gap-1 w-[250px]">
+              <div className="flex flex-col gap-1 w-full">
                 {/* Interactive Slider bar - expanded clickable area */}
                 <div
                   id="raise-slider"
-                  className="relative h-12 cursor-pointer flex items-center px-6"
+                  className="relative h-12 cursor-pointer flex items-center px-2 w-full"
                   onMouseDown={handleMouseDown}
                 >
                   {/* Visual track */}
-                  <div className="absolute left-6 right-6 h-2 bg-neutral-400 bg-opacity-70 rounded-full" />
+                  <div className="absolute left-0 right-0 h-1.5 bg-neutral-400 bg-opacity-70 rounded-full" />
 
                   {/* Chip indicator - positioned relative to track */}
                   <img
@@ -224,15 +218,15 @@ const HUDInputRow = memo<{ raise: any; currencyType: any }>(
                 onClick={handleIncrement}
                 disabled={raise.value >= raise.max}
                 className={classNames(
-                  "w-10 h-10 rounded-xl bg-neutral-400 bg-opacity-70 flex items-center justify-center",
-                  "text-white text-xl font-bold transition-all duration-200",
-                  "hover:bg-opacity-90 active:scale-95",
+                  "material flex items-center justify-center",
+                  "text-white type-button-2 py-2 px-3 rounded-sm",
+                  "active:scale-95 hover:scale-105",
                   raise.value >= raise.max && "opacity-50 cursor-not-allowed"
                 )}
               >
                 +
               </button>
-            </>
+            </div>
           )}
         </div>
       </motion.div>
@@ -286,9 +280,7 @@ export const HUDComponent = memo<{
             </HUDBettingConsumer>
 
             <div className="relative flex items-center flex-col">
-              {/* Cards are now displayed on the table, not in HUD */}
-
-              <div className="material rounded-[12px] lg:rounded-[24px] z-10 relative gap-2 flex flex-col items-center justify-center p-2 lg:p-3 lg:whitespace-nowrap w-full lg:w-auto ">
+              <div className={classNames("material rounded-[12px] mb-2 lg:rounded-[24px] z-10 relative gap-2 flex flex-col items-center justify-center p-0.5 lg:whitespace-nowrap w-full", progress ? "visible" : "invisible")}>
                 <div className="absolute inset-0 rounded-[12px] lg:rounded-[24px] overflow-hidden">
                   {progress !== undefined && (
                     <motion.div
@@ -316,150 +308,150 @@ export const HUDComponent = memo<{
                     className="absolute inset-0 mix-blend-screen opacity-[0.08] z-0 pointer-events-none"
                   />
                 </div>
+              </div>
 
-                <HUDBettingConsumer>
-                  {({ tableUser, raise, autoCheckFold, currencyType }) => (
-                    <AnimatePresence>
-                      {isJoined && tableUser && (
-                        <HudBalanceComponent
-                          balance={tableUser.balance}
-                          currencyType={currencyType}
-                        />
-                      )}
+              <HUDBettingConsumer>
+                {({ tableUser, raise, autoCheckFold, currencyType }) => (
+                  <AnimatePresence>
+                    {isJoined && tableUser && (
+                      <HudBalanceComponent
+                        balance={tableUser.balance}
+                        currencyType={currencyType}
+                      />
+                    )}
 
-                      <div className="gap-2 flex flex-row items-center justify-center">
-                        {!raise?.showInlineInput && isJoined && (
-                          <>
-                            {!sitout.isSittingOut &&
-                              autoCheckFold &&
-                              isOngoing && (
-                                <div
-                                  className={classNames(
-                                    "transition-transform",
-                                    { "scale-90": autoCheckFold.data }
-                                  )}
-                                >
-                                  <WeirdKnobComponent
-                                    mutate={() =>
-                                      autoCheckFold.mutate(!autoCheckFold.data)
-                                    }
-                                    isPending={autoCheckFold.isPending}
-                                    variant={
-                                      autoCheckFold.data
-                                        ? "gray"
-                                        : "transparent"
-                                    }
-                                  >
-                                    Check/Fold
-                                  </WeirdKnobComponent>
-                                </div>
-                              )}
-
-                            {isOngoing && !sitout.isSittingOut && (
-                              <>
+                    <div className="gap-2 flex flex-row items-center justify-center">
+                      {!raise?.showInlineInput && isJoined && (
+                        <>
+                          {!sitout.isSittingOut &&
+                            autoCheckFold &&
+                            isOngoing && (
+                              <div
+                                className={classNames(
+                                  "transition-transform",
+                                  { "scale-90": autoCheckFold.data }
+                                )}
+                              >
                                 <WeirdKnobComponent
-                                  mutate={() => setShowSitOutModal(true)}
-                                  isPending={
-                                    sitout.isPending || showSitOutModal
+                                  mutate={() =>
+                                    autoCheckFold.mutate(!autoCheckFold.data)
                                   }
-                                  variant="transparent"
+                                  isPending={autoCheckFold.isPending}
+                                  variant={
+                                    autoCheckFold.data
+                                      ? "gray"
+                                      : "transparent"
+                                  }
                                 >
-                                  Sit out
+                                  Check/Fold
                                 </WeirdKnobComponent>
-
-                                <Modal
-                                  open={showSitOutModal}
-                                  onClose={() => setShowSitOutModal(false)}
-                                >
-                                  <TitleTextComponent
-                                    title="Sit Out"
-                                    text="If you choose to sit out while the game is in progress, your hand will automatically fold."
-                                  />
-                                  <ModalFooterPortal>
-                                    <ButtonComponent
-                                      variant="naked"
-                                      onClick={() => setShowSitOutModal(false)}
-                                    >
-                                      Cancel
-                                    </ButtonComponent>
-                                    <ButtonComponent
-                                      color="red"
-                                      onClick={async () => {
-                                        await sitout.sitOut();
-                                        setShowSitOutModal(false);
-                                      }}
-                                      isLoading={sitout.isPending}
-                                    >
-                                      Fold & Sit out
-                                    </ButtonComponent>
-                                  </ModalFooterPortal>
-                                </Modal>
-                              </>
+                              </div>
                             )}
 
-                            {/* RNG Transparency Button */}
-                            {openRngDashboard && (
+                          {isOngoing && !sitout.isSittingOut && (
+                            <>
                               <WeirdKnobComponent
-                                mutate={() => openRngDashboard()}
-                                isPending={false}
+                                mutate={() => setShowSitOutModal(true)}
+                                isPending={
+                                  sitout.isPending || showSitOutModal
+                                }
                                 variant="transparent"
                               >
-                                🎲 RNG
+                                Sit out
                               </WeirdKnobComponent>
+
+                              <Modal
+                                open={showSitOutModal}
+                                onClose={() => setShowSitOutModal(false)}
+                              >
+                                <TitleTextComponent
+                                  title="Sit Out"
+                                  text="If you choose to sit out while the game is in progress, your hand will automatically fold."
+                                />
+                                <ModalFooterPortal>
+                                  <ButtonComponent
+                                    variant="naked"
+                                    onClick={() => setShowSitOutModal(false)}
+                                  >
+                                    Cancel
+                                  </ButtonComponent>
+                                  <ButtonComponent
+                                    color="red"
+                                    onClick={async () => {
+                                      await sitout.sitOut();
+                                      setShowSitOutModal(false);
+                                    }}
+                                    isLoading={sitout.isPending}
+                                  >
+                                    Fold & Sit out
+                                  </ButtonComponent>
+                                </ModalFooterPortal>
+                              </Modal>
+                            </>
+                          )}
+
+                          {/* RNG Transparency Button */}
+                          {openRngDashboard && (
+                            <WeirdKnobComponent
+                              mutate={() => openRngDashboard()}
+                              isPending={false}
+                              variant="transparent"
+                            >
+                              🎲 RNG
+                            </WeirdKnobComponent>
+                          )}
+
+                          {/* Show separator if there are any buttons before play buttons */}
+                          {((!sitout.isSittingOut &&
+                            autoCheckFold &&
+                            isOngoing) ||
+                            (isOngoing && !sitout.isSittingOut) ||
+                            openRngDashboard) && <HudSeperator desktopOnly />}
+                        </>
+                      )}
+
+                      <DynamicSizeComponent
+                        animateWidth
+                        animateHeight={false}
+                        className="whitespace-nowrap justify-center items-center"
+                      >
+                        <div className="flex flex-row">
+                          <HudPlayButtonsComponent
+                            tournament_table_id={tournament?.user?.table?.id}
+                            tournament_is_running={tournament?.isRunning}
+                            tournament_start_time={
+                              tournament?.data.start_time
+                            }
+                            tournament_state={tournament?.data.state}
+                            tournament_join_type={tournament?.joinType}
+                            tournamentUserTextsTitle={texts?.title}
+                            isSittingOut={sitout.isSittingOut}
+                            isSittingBackIn={sitout.isSittingBackIn}
+                            isSittingOutPending={sitout.isPending}
+                            rejoin={sitout.rejoin}
+                            sitOut={sitout.sitOut}
+                            userIndex={userIndex}
+                            userPlayerAction={user?.data?.player_action}
+                            userIsQueuedForNextRound={
+                              user && "QueuedForNextRound" in user.status
+                            }
+                            isTableOngoing={isOngoing}
+                            current_player_index={table.current_player_index}
+                            tableId={table.id}
+                            isTablePaused={UnwrapOptional(
+                              table.config.is_paused
                             )}
-
-                            {/* Show separator if there are any buttons before play buttons */}
-                            {((!sitout.isSittingOut &&
-                              autoCheckFold &&
-                              isOngoing) ||
-                              (isOngoing && !sitout.isSittingOut) ||
-                              openRngDashboard) && <HudSeperator desktopOnly />}
-                          </>
-                        )}
-
-                        <DynamicSizeComponent
-                          animateWidth
-                          animateHeight={false}
-                          className="whitespace-nowrap justify-center items-center"
-                        >
-                          <div className="flex flex-row">
-                            <HudPlayButtonsComponent
-                              tournament_table_id={tournament?.user?.table?.id}
-                              tournament_is_running={tournament?.isRunning}
-                              tournament_start_time={
-                                tournament?.data.start_time
-                              }
-                              tournament_state={tournament?.data.state}
-                              tournament_join_type={tournament?.joinType}
-                              tournamentUserTextsTitle={texts?.title}
-                              isSittingOut={sitout.isSittingOut}
-                              isSittingBackIn={sitout.isSittingBackIn}
-                              isSittingOutPending={sitout.isPending}
-                              rejoin={sitout.rejoin}
-                              sitOut={sitout.sitOut}
-                              userIndex={userIndex}
-                              userPlayerAction={user?.data?.player_action}
-                              userIsQueuedForNextRound={
-                                user && "QueuedForNextRound" in user.status
-                              }
-                              isTableOngoing={isOngoing}
-                              current_player_index={table.current_player_index}
-                              tableId={table.id}
-                              isTablePaused={UnwrapOptional(
-                                table.config.is_paused
-                              )}
-                              tableHasMoreThanOnePlayer={
-                                table.seats.filter((v) => !("Empty" in v))
-                                  .length > 1
-                              }
-                            />
-                          </div>
-                        </DynamicSizeComponent>
-                      </div>
-                    </AnimatePresence>
-                  )}
-                </HUDBettingConsumer>
-              </div>
+                            tableHasMoreThanOnePlayer={
+                              table.seats.filter((v) => !("Empty" in v))
+                                .length > 1
+                            }
+                          />
+                        </div>
+                      </DynamicSizeComponent>
+                    </div>
+                  </AnimatePresence>
+                )}
+              </HUDBettingConsumer>
             </div>
           </ProvideHUDBettingContext>
         </motion.div>

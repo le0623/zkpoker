@@ -1,7 +1,6 @@
 import { memo } from 'react';
 
-import { WeirdKnobComponent } from '@zk-game-dao/ui';
-
+import { TurnButtonComponent } from '@lib/ui/button/turn-button.component';
 import { useHUDBetting } from './hud-betting.context';
 
 export const TurnButtonsComponent = memo(() => {
@@ -10,45 +9,41 @@ export const TurnButtonsComponent = memo(() => {
   return (
     <div className="lg:gap-2 flex flex-row items-center justify-center">
       {fold && (
-        <WeirdKnobComponent
-          variant="red"
+        <TurnButtonComponent
           {...fold}
           straightRightMobile={!!raise || !!call || !!check || !!allIn}
         >
           Fold
-        </WeirdKnobComponent>
+        </TurnButtonComponent>
       )}
       {check && (
-        <WeirdKnobComponent
-          variant="gray"
+        <TurnButtonComponent
           {...check}
           straightLeftMobile={!!fold}
           straightRightMobile={!!raise || !!call || !!allIn}
         >
           Check
-        </WeirdKnobComponent>
+        </TurnButtonComponent>
       )}
       {call && (
-        <WeirdKnobComponent
-          variant="orange"
+        <TurnButtonComponent
           {...call}
           straightLeftMobile={!!fold || !!check}
           straightRightMobile={!!raise || !!allIn}
         >
           Call
-        </WeirdKnobComponent>
+        </TurnButtonComponent>
       )}
       {/* All-in button - only show for non-PLO games (Texas Hold'em, etc.) */}
       {/* For PLO: All-in is shown in the raise section when canRaise is false */}
       {allIn && !raise?.isPLO && (
-        <WeirdKnobComponent
-          variant="black"
+        <TurnButtonComponent
           {...allIn}
           straightLeftMobile
           hideOnMobile={!!raise}
         >
           All in
-        </WeirdKnobComponent>
+        </TurnButtonComponent>
       )}
 
       {/* Bet/Raise section - now just the button */}
@@ -56,22 +51,20 @@ export const TurnButtonsComponent = memo(() => {
         <>
           {/* For PLO: if can't raise, show All-in button instead */}
           {raise.isPLO && !raise.canRaise ? (
-            <WeirdKnobComponent
-              variant="black"
+            <TurnButtonComponent
               {...allIn}
               straightLeftMobile={!!fold || !!check || !!call}
             >
               All in
-            </WeirdKnobComponent>
+            </TurnButtonComponent>
           ) : (
             /* Just the Raise/Bet button, no input */
-            <WeirdKnobComponent
-              variant="black"
+            <TurnButtonComponent
               straightLeftMobile={!!fold || !!check || !!call || !!allIn}
               {...raise.cta}
             >
               {raise.actionLabel}
-            </WeirdKnobComponent>
+            </TurnButtonComponent>
           )}
         </>
       )}

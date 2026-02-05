@@ -44,7 +44,7 @@ import { TableScreenTournamentModalButton } from './table-screen-tournament-moda
 import { ChatComponent } from '../../../../components/common/chat/chat.component';
 import { AnimatePresence } from 'framer-motion';
 import { useWording } from '../../../../hooks/wording';
-import { RngDashboard } from '../rng-dashboard/rng-dashboard.component';
+import { RngDashboardModalComponent } from '../rng-dashboard-modal';
 
 const TableScreenDebugModalButton = lazy(() => import('./table-screen-debug-modal.component'));
 
@@ -85,7 +85,6 @@ export const TableScreenInnerComponent = memo<{ openRngDashboard: (roundId?: big
           chat ? 'md:right-[420px]' : 'md:right-16',
         )}
       />
-
       <AnimatePresence>
         {chat && <ChatComponent />}
       </AnimatePresence>
@@ -397,8 +396,8 @@ const TableComponentInner = memo<{
 
             {canSeeRefill && <RefillModal />}
 
-            <RngDashboard
-              isOpen={rngDashboardOpen}
+            <RngDashboardModalComponent
+              show={rngDashboardOpen}
               onClose={closeRngDashboard}
               roundId={selectedRoundId}
               tableActor={actor}
@@ -428,7 +427,7 @@ export const TableScreenComponent = memo<{ table_principal: Principal }>(
       queryFn: async () => {
         if (!actor) throw new Error(`No valid id found in url`);
         try {
-          const d = await actor.get_table();  
+          const d = await actor.get_table();
           if ("Err" in d) throw d.Err;
           return d.Ok;
         } catch (e) {

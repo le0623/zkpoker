@@ -1,4 +1,4 @@
-use candid::{Decode, Encode};
+use candid::{Decode, Encode, Principal};
 
 use currency::state::TransactionState;
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
@@ -8,6 +8,31 @@ use std::{borrow::Cow, cell::RefCell};
 
 use crate::table_index::{PrivateTableIndex, PublicTableIndex};
 use crate::{PRIVATE_TABLE_INDEX_STATE, PUBLIC_TABLE_INDEX_STATE, TRANSACTION_STATE};
+
+// Wrapper type for Vec<Principal> to implement Storable
+#[derive(Clone, Debug)]
+struct PrincipalVec(Vec<Principal>);
+
+impl Storable for PrincipalVec {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(Encode!(&self.0).unwrap_or_else(|e| {
+            ic_cdk::println!("Serialization error for PrincipalVec: {:?}", e);
+            vec![]
+        }))
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        PrincipalVec(Decode!(bytes.as_ref(), Vec<Principal>).unwrap_or_else(|e| {
+            ic_cdk::println!("Deserialization error for PrincipalVec: {:?}", e);
+            Vec::new()
+        }))
+    }
+
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 1_000_000, // 1MB should be enough for pool
+        is_fixed_size: false,
+    };
+}
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
@@ -65,6 +90,7 @@ impl Storable for PrivateTableIndex {
     };
 }
 
+
 thread_local! {
     // The memory manager is used for simulating multiple memories. Given a `MemoryId` it can
     // return a memory that can be used by stable structures.
@@ -89,6 +115,13 @@ thread_local! {
         Cell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
             TransactionState::new()
+        ).unwrap()
+    );
+
+    static TABLE_CANISTER_POOL_CELL: RefCell<Cell<PrincipalVec, Memory>> = RefCell::new(
+        Cell::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4))),
+            PrincipalVec(Vec::new())
         ).unwrap()
     );
 }
@@ -121,6 +154,16 @@ fn pre_upgrade() {
             });
         } else {
             ic_cdk::println!("Failed to acquire TRANSACTION_STATE lock");
+        }
+
+        // Save canister pool
+        if let Ok(pool) = crate::TABLE_CANISTER_POOL.lock() {
+            TABLE_CANISTER_POOL_CELL.with(|p| {
+                let mut cell = p.borrow_mut();
+                let _ = cell.set(PrincipalVec(pool.clone()));
+            });
+        } else {
+            ic_cdk::println!("Failed to acquire TABLE_CANISTER_POOL lock");
         }
     });
 
@@ -157,6 +200,16 @@ fn post_upgrade() {
             });
         } else {
             ic_cdk::println!("Failed to acquire TRANSACTION_STATE lock");
+        }
+
+        // Restore canister pool
+        if let Ok(mut pool) = crate::TABLE_CANISTER_POOL.lock() {
+            TABLE_CANISTER_POOL_CELL.with(|p| {
+                let cell = p.borrow();
+                pool.clone_from(&cell.get().0);
+            });
+        } else {
+            ic_cdk::println!("Failed to acquire TABLE_CANISTER_POOL lock");
         }
     });
 

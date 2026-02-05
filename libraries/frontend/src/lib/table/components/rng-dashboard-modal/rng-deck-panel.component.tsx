@@ -1,24 +1,22 @@
-import { useMemo, useState, useEffect, useRef } from "react";
-import type { RngMetadata, Card, CardProvenance } from "../../types/rng.types";
-import type { _SERVICE } from "@declarations/table_canister/table_canister.did";
-import { useTable } from "../../context/table.context";
-import { useUser } from "@lib/user";
-import { calculateCardHash } from "../../utils/card-hash";
-import { shortenHash } from "../../types/rng.types";
-import { CardComponent } from "../card/card.component";
-import { getAllSeatAssignments } from "../../utils/seat-lookup";
+import classNames from 'classnames';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 
-interface RngDeckPanelProps {
+import type { _SERVICE } from '@declarations/table_canister/table_canister.did';
+import { ButtonComponent, Interactable } from '@zk-game-dao/ui';
+
+import { useUser } from '@lib/user';
+import { CardComponent } from '../card/card.component';
+import { useTable } from '../../context/table.context';
+import { calculateCardHash } from '../../utils/card-hash';
+import { getAllSeatAssignments } from '../../utils/seat-lookup';
+import type { Card, CardProvenance, RngMetadata } from '../../types/rng.types';
+import { shortenHash } from '../../types/rng.types';
+
+export const RngDeckPanelComponent = memo<{
   rngData: RngMetadata;
   tableActor: _SERVICE;
   roundId?: bigint;
-}
-
-export function RngDeckPanel({
-  rngData,
-  tableActor,
-  roundId,
-}: RngDeckPanelProps) {
+}>(({ rngData, tableActor, roundId }) => {
   const { table, user } = useTable();
   const { user: zkpUser } = useUser();
 
@@ -116,41 +114,6 @@ export function RngDeckPanel({
             provenanceMap.set(prov.shuffled_position, prov);
           });
 
-          const sampleProvenance = Array.from(provenanceMap.values())
-            .filter(
-              (p) =>
-                p.dealt_to.length > 0 ||
-                (p.dealt_at_stage && Object.keys(p.dealt_at_stage).length > 0)
-            )
-            .slice(0, 10);
-          if (sampleProvenance.length > 0) {
-            console.log(
-              "✅ Sample provenance with dealt_to/dealt_at_stage:",
-              sampleProvenance.map((p) => ({
-                position: p.shuffled_position,
-                dealt_to: p.dealt_to,
-                dealt_to_length: p.dealt_to.length,
-                dealt_at_stage: p.dealt_at_stage,
-                stageKeys: p.dealt_at_stage
-                  ? Object.keys(p.dealt_at_stage)
-                  : null,
-              }))
-            );
-          } else {
-            console.log(
-              "⚠️ No provenance records found with dealt_to or dealt_at_stage populated!",
-              "Checking first 5 cards:",
-              Array.from(provenanceMap.values())
-                .slice(0, 5)
-                .map((p) => ({
-                  position: p.shuffled_position,
-                  dealt_to_length: p.dealt_to.length,
-                  dealt_at_stage_keys: p.dealt_at_stage
-                    ? Object.keys(p.dealt_at_stage).length
-                    : 0,
-                }))
-            );
-          }
 
           setCardProvenance(provenanceMap);
         }
@@ -206,9 +169,6 @@ export function RngDeckPanel({
                 ? 5
                 : 0;
 
-      if (table.community_cards.length !== expectedCount) {
-        console.warn("Community cards out of sync with deal stage!");
-      }
     }
 
     return revealed;
@@ -581,61 +541,75 @@ export function RngDeckPanel({
     };
 
     return (
-      <div
-        className={`card-item-wrapper ${isRevealed ? "revealed" : "hidden"} ${isHoleCard ? "hole-card" : ""} ${isCommunityCard ? "community-card" : ""}`}
+      <Interactable
+        className={classNames(
+          'relative cursor-pointer',
+          {
+            'opacity-100': isRevealed,
+            'opacity-50': !isRevealed,
+          }
+        )}
         onClick={handleCardClick}
-        style={{ cursor: "pointer" }}
       >
         {!isRevealed ? (
-          <div className="card-back">
+          <div className="relative">
             <CardComponent size="small" />
-            <div className="hash-overlay" title={provenance.card_hash}>
+            <div className="material absolute bottom-0 left-0 right-0 text-xs px-1 py-0.5 rounded-b" title={provenance.card_hash}>
               {shortenHash(provenance.card_hash, 6, 4)}
             </div>
           </div>
         ) : isFlipped ? (
-          <div className="card-back">
+          <div className="relative">
             <CardComponent size="small" />
-            <div className="hash-overlay" title={provenance.card_hash}>
+            <div className="material absolute bottom-0 left-0 right-0 text-xs px-1 py-0.5 rounded-b" title={provenance.card_hash}>
               {shortenHash(provenance.card_hash, 6, 4)}
             </div>
           </div>
         ) : (
-          <div className="card-display">
+          <div className="relative">
             <CardComponent card={provenance.card} size="small" />
             {calculatedHashes.has(position) && (
               <div
-                className="hash-overlay hash-overlay-front"
+                className="material absolute bottom-0 left-0 right-0 text-xs px-1 py-0.5 rounded-b"
                 title={calculatedHashes.get(position)}
               >
                 {shortenHash(calculatedHashes.get(position)!, 6, 4)}
               </div>
             )}
             {verifyingCard === position && (
-              <div className="hash-overlay hash-overlay-loading">
+              <div className="material absolute inset-0 flex items-center justify-center rounded text-xs">
                 Calculating...
               </div>
             )}
           </div>
         )}
 
-        {isHoleCard && <div className="card-type-badge">H</div>}
+        {isHoleCard && (
+          <div className="material absolute top-0 right-0 text-blue-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center -mt-1 -mr-1">
+            H
+          </div>
+        )}
         {isCommunityCard && !isHoleCard && (
-          <div className="card-type-badge">C</div>
+          <div className="material absolute top-0 right-0 text-orange-500 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center -mt-1 -mr-1">
+            C
+          </div>
         )}
 
-        <div className="card-position">#{position}</div>
+        <div className="material absolute bottom-0 left-0 text-xs px-1 rounded-tr">#{position}</div>
 
         {hashVerified !== undefined &&
           calculatedHashes.has(position) &&
           !isFlipped && (
             <div
-              className={`hash-badge ${hashVerified ? "match" : "mismatch"}`}
+              className={classNames(
+                'material absolute top-0 left-0 rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold -mt-1 -ml-1',
+                hashVerified ? 'text-green-500' : 'text-red-500'
+              )}
             >
-              {hashVerified ? "✓" : "✗"}
+              {hashVerified ? '✓' : '✗'}
             </div>
           )}
-      </div>
+      </Interactable>
     );
   };
 
@@ -914,13 +888,16 @@ export function RngDeckPanel({
     if (cards.length === 0 && !showIfEmpty) return null;
 
     return (
-      <div className={`card-group ${className}`}>
-        <h4 className="card-group-title">{title}</h4>
+      <div className={classNames('mb-4', className)}>
+        <h4 className="type-button-2 mb-2">{title}</h4>
         <div
-          className={`card-group-grid ${className ? "hole-cards-grid" : ""}`}
+          className={classNames(
+            'grid gap-2',
+            className ? 'grid-cols-2' : 'grid-cols-4'
+          )}
         >
           {cards.length === 0 ? (
-            <div className="card-group-empty">No cards yet</div>
+            <div className="type-tiny opacity-70 col-span-full">No cards yet</div>
           ) : (
             cards.map(({ position, provenance }) => (
               <CardItem
@@ -1101,11 +1078,11 @@ export function RngDeckPanel({
     };
 
     return (
-      <div className="card-group">
-        <h4 className="card-group-title">Other Players Cards</h4>
-        <div className="other-players-cards-container">
+      <div className="mb-4">
+        <h4 className="type-button-2 mb-2">Other Players Cards</h4>
+        <div className="space-y-4">
           {cardsByPlayer.size === 0 ? (
-            <div className="card-group-empty">No cards yet</div>
+            <div className="type-tiny opacity-70">No cards yet</div>
           ) : (
             Array.from(cardsByPlayer.entries())
               .sort((a, b) => (a[1][0]?.seatNumber || 0) - (b[1][0]?.seatNumber || 0))
@@ -1116,28 +1093,28 @@ export function RngDeckPanel({
                   const username = getUsername(principalText);
 
                   return (
-                    <div key={principalText} className="player-cards-row">
-                      <div className="player-cards-header">
-                        <span className="player-seat">
+                    <div key={principalText} className="space-y-2">
+                      <div className="flex items-center gap-2 type-button-3">
+                        <span>
                           Seat {displaySeatNumber}
                         </span>
                         {username && (
                           <>
-                            <span className="player-separator">-</span>
-                            <span className="player-name">{username}</span>
+                            <span>-</span>
+                            <span>{username}</span>
                           </>
                         )}
                       </div>
-                      <div className="card-group-grid">
+                      <div className="grid grid-cols-4 gap-2">
                         {playerCards.map(
                           ({
                             position,
                             provenance,
                             seatNumber: cardSeatNumber,
                           }) => (
-                            <div
+                            <Interactable
                               key={position}
-                              className="card-item-wrapper other-player-card"
+                              className="relative cursor-pointer"
                               onClick={() => {
                                 setSelectedCardPosition(position);
                                 setTimeout(() => {
@@ -1151,22 +1128,18 @@ export function RngDeckPanel({
                                   }
                                 }, 100);
                               }}
-                              style={{ cursor: "pointer" }}
                             >
-                              {/* Always show card back */}
-                              <div className="card-back">
+                              <div className="relative">
                                 <CardComponent size="small" />
                                 <div
-                                  className="hash-overlay"
+                                  className="material absolute bottom-0 left-0 right-0 text-xs px-1 py-0.5 rounded-b"
                                   title={provenance.card_hash}
                                 >
                                   {shortenHash(provenance.card_hash, 6, 4)}
                                 </div>
                               </div>
-
-                              {/* Position label */}
-                              <div className="card-position">#{position}</div>
-                            </div>
+                              <div className="material absolute bottom-0 left-0 text-xs px-1 rounded-tr">#{position}</div>
+                            </Interactable>
                           )
                         )}
                       </div>
@@ -1182,57 +1155,57 @@ export function RngDeckPanel({
 
   if (loading) {
     return (
-      <section className="rng-panel">
-        <h3 className="panel-title">🃏 Deck Transparency</h3>
-        <div className="loading-state">Loading deck data...</div>
-      </section>
+      <div className="material rounded-lg p-4 mb-4">
+        <h3 className="type-top mb-4">🃏 Deck Transparency</h3>
+        <div className="type-tiny opacity-70">Loading deck data...</div>
+      </div>
     );
   }
 
   return (
-    <section className="rng-panel">
-      <h3 className="panel-title">
+    <div className="material rounded-lg p-4 mb-4">
+      <h3 className="type-top mb-4">
         {allCardsRevealed
-          ? "🃏 Full Shuffled Deck (52 cards)"
+          ? '🃏 Full Shuffled Deck (52 cards)'
           : `🃏 Deck Transparency (${revealedCount} cards revealed)`}
       </h3>
 
-      <div className="deck-info-banner">
+      <div className="material rounded p-3 mb-4">
         {gameFinished ? (
           showdownData?.isShowdown ? (
             allCardsRevealed ? (
-              <p className="info-hint">
+              <p className="type-tiny opacity-70">
                 ✅ Showdown completed. All cards are now visible. Click any card
                 to verify its cryptographic hash and toggle between front/back
                 view.
               </p>
             ) : (
-              <p className="info-hint">
+              <p className="type-tiny opacity-70">
                 🔄 Showdown in progress. Cards are being revealed in order (
-                {revealedShowdownPlayers.size}/{showdownData.revealOrder.length}{" "}
+                {revealedShowdownPlayers.size}/{showdownData.revealOrder.length}{' '}
                 players revealed).
               </p>
             )
           ) : (
-            <p className="info-hint">
+            <p className="type-tiny opacity-70">
               ✅ Game ended. Only one player remained, so no showdown occurred.
               Community cards and your cards are visible. Click any card to
               verify its cryptographic hash.
             </p>
           )
         ) : (
-          <p className="info-hint">
-            🔒 During gameplay: You can see your hole cards (marked with{" "}
-            <strong style={{ color: "#3b82f6" }}>H</strong>) and community cards
-            (marked with <strong style={{ color: "#f59e0b" }}>C</strong>). All
+          <p className="type-tiny opacity-70">
+            🔒 During gameplay: You can see your hole cards (marked with{' '}
+            <strong className="text-blue-500">H</strong>) and community cards
+            (marked with <strong className="text-orange-500">C</strong>). All
             52 card hashes are visible. Other cards show as face-down with their
             hash. Click revealed cards to verify their integrity.
           </p>
         )}
       </div>
 
-      <div className="rng-deck-layout">
-        <div className="card-groups-container">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {renderCardGroup(
             "Hole Cards",
             groupedCards.holeCards,
@@ -1243,12 +1216,11 @@ export function RngDeckPanel({
           {renderCardGroup("Turn", groupedCards.turnCards, false)}
           {renderCardGroup("River", groupedCards.riverCards, false)}
           {renderOtherPlayersCards(groupedCards.otherPlayersCards)}
-          {/* {renderCardGroup("Remaining Cards", groupedCards.remainingCards)} */}
         </div>
 
-        <div className="hash-list-container" ref={hashListContainerRef}>
-          <h4 className="hash-list-title">Card Hash List (52 cards)</h4>
-          <div className="hash-list">
+        <div className="material rounded p-4 max-h-[600px] overflow-y-auto" ref={hashListContainerRef}>
+          <h4 className="type-button-2 mb-4">Card Hash List (52 cards)</h4>
+          <div className="space-y-1">
             {Array.from({ length: 52 }, (_, index) => {
               const provenance = cardProvenance.get(index);
               const hash = provenance?.card_hash || "Loading...";
@@ -1268,16 +1240,20 @@ export function RngDeckPanel({
                       hashListRefs.current.delete(index);
                     }
                   }}
-                  className={`hash-list-item ${isHighlighted ? "highlighted" : ""} ${isRevealed ? "revealed" : ""}`}
+                  className={classNames(
+                    'material flex items-center gap-2 p-2 rounded cursor-pointer',
+                    {
+                      'opacity-100': isRevealed,
+                      'opacity-50': !isRevealed,
+                    }
+                  )}
                   onClick={() => {
-                    // Allow clicking hash to highlight it too
                     setSelectedCardPosition(index);
                   }}
-                  style={{ cursor: "pointer" }}
                 >
-                  <span className="hash-position">#{index}</span>
-                  <span className="hash-value">{shortenHash(hash, 8, 6)}</span>
-                  {isHighlighted && <div className="lightning-effect">⚡</div>}
+                  <span className="type-tiny font-mono">#{index}</span>
+                  <span className="type-tiny font-mono flex-1">{shortenHash(hash, 8, 6)}</span>
+                  {isHighlighted && <span className="text-yellow-500">⚡</span>}
                 </div>
               );
             })}
@@ -1285,8 +1261,8 @@ export function RngDeckPanel({
         </div>
       </div>
 
-      <div className="panel-footer">
-        <p className="info-hint">
+      <div className="mt-4 space-y-2">
+        <p className="type-tiny opacity-70">
           {allCardsRevealed ? (
             <>
               <strong>✅ Full Transparency:</strong> All 52 cards are visible.
@@ -1295,7 +1271,7 @@ export function RngDeckPanel({
             </>
           ) : (
             <>
-              <strong>🔒 Partial Visibility:</strong> You can see{" "}
+              <strong>🔒 Partial Visibility:</strong> You can see{' '}
               {revealedCount} cards (your hole cards + community cards). All
               hashes are visible for verification. Full deck revealed after game
               ends.
@@ -1304,23 +1280,24 @@ export function RngDeckPanel({
         </p>
 
         {allCardsRevealed && (
-          <div className="verification-reminder">
-            <p className="info-hint">
+          <div className="space-y-2">
+            <p className="type-tiny opacity-70">
               <strong>🔍 Verification:</strong> Click any card to independently
               calculate its hash from the card value, suit, position, and round
               ID. A ✓ badge means the hash matches (deck integrity confirmed).
             </p>
-            <p className="info-hint" style={{ marginTop: "0.5rem" }}>
-              <strong>📋 Card Badges:</strong> Cards are marked with badges:{" "}
-              <strong style={{ color: "#3b82f6" }}>H</strong> = Hole card (your
-              private cards), <strong style={{ color: "#f59e0b" }}>C</strong> =
-              Community card (shared cards on the table),{" "}
-              <strong style={{ color: "#6366f1" }}>#N</strong> = Seat number
+            <p className="type-tiny opacity-70">
+              <strong>📋 Card Badges:</strong> Cards are marked with badges:{' '}
+              <strong className="text-blue-500">H</strong> = Hole card (your
+              private cards), <strong className="text-orange-500">C</strong> =
+              Community card (shared cards on the table),{' '}
+              <strong className="text-indigo-500">#N</strong> = Seat number
               (which player received the card).
             </p>
           </div>
         )}
       </div>
-    </section>
+    </div>
   );
-}
+});
+RngDeckPanelComponent.displayName = 'RngDeckPanelComponent';

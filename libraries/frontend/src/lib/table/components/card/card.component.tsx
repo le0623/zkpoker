@@ -123,7 +123,7 @@ const ActualCard = memo<Pick<Props, "floating" | "card" | "size">>(
             "text-[17px]": size === "small",
             "text-[24px]": size === "medium",
             "rounded-[6px]": size === "small" || size === "medium",
-            "py-1 px-2":
+            "py-1 px-1":
               size === "between-microscopic-and-small" ||
               size === "small" ||
               size === "medium",
@@ -148,11 +148,11 @@ const ActualCard = memo<Pick<Props, "floating" | "card" | "size">>(
         )}
         <div
           className={classNames(
-            "flex flex-col text-center mr-auto",
+            "flex flex-col text-center mr-auto font-inter",
             isLargeText
               ? {
                 "leading-[1.1]": isLargeText,
-                "text-[24px]":
+                "text-[20px]":
                   (isLargeText && size === "large") ||
                   size === "medium" ||
                   size === "small" ||
@@ -162,8 +162,10 @@ const ActualCard = memo<Pick<Props, "floating" | "card" | "size">>(
               : "",
           )}
         >
-          {valueSymbol}
-          <br />
+          <div>{valueSymbol}</div>
+          <div className="-mt-1">{symbol}</div>
+        </div>
+        <div className="absolute bottom-0 right-0 text-5xl pr-1 font-inter">
           {symbol}
         </div>
       </motion.div>
@@ -184,7 +186,7 @@ export const CardComponent = memo<Props>(
           relative: !className || className?.indexOf("absolute") === -1,
           "w-[34px]": size === "microscopic",
           "w-[48px]": size === "between-microscopic-and-small",
-          "w-[58px]": size === "small",
+          "w-[52px]": size === "small",
           "w-[80px]": size === "medium",
           "w-24": size === "large",
         })}

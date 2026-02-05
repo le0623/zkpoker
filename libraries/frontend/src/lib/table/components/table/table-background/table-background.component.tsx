@@ -101,17 +101,17 @@ export const TableBackgroundComponent = memo<
       if (!community_cards && !children && !onShowWinners) return;
       return (
         <>
-          {renderPotAnimations && !!children && (
-            <div className="w-full rounded-[32px] border-[4px] border-material-main-2 relative h-[126px] flex flex-col justify-center items-center gap-1">
-              {children}
-            </div>
-          )}
-
           {community_cards && (
             <Interactable onClick={() => setShowRanks(true)}>
               <CommunityCardsComponent community_cards={community_cards} />
             </Interactable>
           )}
+          {renderPotAnimations && !!children && (
+            <div className="w-full rounded-[32px] mt-4 border-[4px] border-material-main-2 relative h-[126px] flex flex-col justify-center items-center gap-1">
+              {children}
+            </div>
+          )}
+
           {/* {onShowWinners && <PillComponent className='mt-2 mx-auto' onClick={onShowWinners}>See winners</PillComponent>} */}
           {!renderPotAnimations && !!children && (
             <div className="w-full rounded-[32px] mt-4 border-[4px] border-material-main-2 relative flex flex-col justify-center items-center gap-1">

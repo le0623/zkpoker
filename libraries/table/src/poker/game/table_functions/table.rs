@@ -978,18 +978,25 @@ impl Table {
     /// This is part of the commit-reveal scheme for provably fair RNG:
     /// 1. Commit phase: Deck hash is stored, but deck remains hidden
     /// 2. Reveal phase: After game ends, the full deck is revealed for verification
-    ///    
+    /// 
+    /// NOTE: The deck is now stored at creation time (before dealing cards),
+    /// so this function is primarily for logging. The deck is already available
+    /// but hidden during gameplay via security checks in query functions.
     pub fn reveal_deck_for_current_round(&mut self) {
         // Get the current round's RNG metadata
         if let Some(last_rng) = self.rng_history.last_mut() {
-            // Only reveal if deck is still hidden (empty)
+            // The deck should already be stored from creation time
+            // If it's empty, that means it was created before the fix
             if last_rng.shuffled_deck.is_empty() {
-                // Reveal the full deck
-                last_rng.shuffled_deck = self.deck.cards().to_vec();
-                
                 #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
                 ic_cdk::println!(
-                    "🔓 Deck revealed for round {}: {} cards",
+                    "⚠️ Warning: Deck for round {} was not stored at creation time (old round)",
+                    last_rng.round_id
+                );
+            } else {
+                #[cfg(any(target_arch = "wasm32", target_arch = "wasm64"))]
+                ic_cdk::println!(
+                    "🔓 Deck available for round {}: {} cards (stored at creation)",
                     last_rng.round_id,
                     last_rng.shuffled_deck.len()
                 );

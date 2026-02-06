@@ -171,9 +171,10 @@ fn get_rng_metadata(round_id: u64) -> Result<RngMetadata, TableError> {
     if !game_ended && rng_metadata.round_id == table.round_ticker {
         rng_metadata.time_seed = 0; // Hide - allows deck reconstruction
         rng_metadata.timestamp_ns = 0; // Hide - same as time_seed
+        // Hide shuffled_deck during gameplay (even though it's stored)
+        rng_metadata.shuffled_deck = Vec::new();
                                        // ✅ Keep raw_random_bytes - visible from start for transparency
                                        // ✅ Keep deck_hash - commitment proof
-                                       // ✅ shuffled_deck already empty during game
     }
 
     Ok(rng_metadata)
@@ -198,9 +199,10 @@ fn get_current_rng_metadata() -> Result<RngMetadata, TableError> {
     if !game_ended {
         rng_metadata.time_seed = 0; // Hide - allows deck reconstruction
         rng_metadata.timestamp_ns = 0; // Hide - same as time_seed
+        // Hide shuffled_deck during gameplay (even though it's stored)
+        rng_metadata.shuffled_deck = Vec::new();
                                        // ✅ Keep raw_random_bytes - visible from start for transparency
                                        // ✅ Keep deck_hash - commitment proof
-                                       // ✅ shuffled_deck already empty during game
     }
 
     Ok(rng_metadata)
@@ -1632,8 +1634,9 @@ async fn start_new_betting_round() -> Result<(), TableError> {
         let round_id = table_state.round_ticker;
         let deck_hash = calculate_deck_hash(&deck);
 
-        // 🔒 SECURITY: Store empty shuffled_deck initially (commit phase)
-        // Full deck will be revealed only after the game ends (reveal phase)
+        // ✅ CRITICAL FIX: Store the FULL original shuffled deck BEFORE dealing any cards
+        // This ensures we can reveal the complete 52-card deck after the game ends
+        // The deck will be hidden during gameplay via security checks in query functions
         let rng_metadata = RngMetadata {
             round_id,
             raw_random_bytes: original_random_bytes,
@@ -1641,7 +1644,7 @@ async fn start_new_betting_round() -> Result<(), TableError> {
             timestamp_ns: time_seed,
             deck_hash,
             ic_transaction_id: None, // Can be enhanced later with actual transaction ID
-            shuffled_deck: Vec::new(), // ✅ Empty until game ends
+            shuffled_deck: deck.cards().to_vec(), // ✅ Store full deck at creation time
         };
 
         // 🆕 GENERATE CARD PROVENANCE

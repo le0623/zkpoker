@@ -510,6 +510,13 @@ impl Default for RngMetadata {
 ///
 /// This allows players to verify exactly where each card came from and
 /// how it ended up in their hand, providing complete transparency.
+///
+/// **IMPORTANT:** `shuffled_position` is the position in the ORIGINAL
+/// shuffled deck (0-51), NOT the current deck state after dealing.
+/// This position remains constant throughout the game and is used for
+/// cryptographic hash verification. As cards are dealt from the deck,
+/// the remaining cards' positions in the current deck state change,
+/// but their `shuffled_position` values remain fixed.
 #[derive(Debug, Clone, Serialize, Deserialize, CandidType)]
 pub struct CardProvenance {
     /// Round ID this card belongs to
@@ -523,10 +530,21 @@ pub struct CardProvenance {
     pub original_position: u8,
 
     /// Position after Fisher-Yates shuffle (0-51)
+    /// 
+    /// **CRITICAL:** This is the position in the ORIGINAL shuffled deck,
+    /// before any cards were dealt. This position is used for hash calculation
+    /// and does NOT change as cards are dealt from the deck.
+    /// 
+    /// Example: If a card is at position 10 in the original shuffled deck,
+    /// it remains at `shuffled_position = 10` even if 5 cards are dealt
+    /// and it's now at position 5 in the current deck state.
     pub shuffled_position: u8,
 
     /// Hash identifier for this specific card in this game
-    /// Format: SHA-256(round_id + card + shuffled_position)
+    /// Format: SHA-256(round_id || card || shuffled_position)
+    /// 
+    /// The hash uses `shuffled_position` (original position), not the
+    /// current deck position, ensuring consistent verification.
     pub card_hash: String,
 
     /// Which player received this card (if dealt)

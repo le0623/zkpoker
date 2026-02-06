@@ -35,12 +35,21 @@ export const RngDashboardModalComponent = memo<RngDashboardModalProps>(({
   // Calculate if game has ended (for security checks)
   const gameEnded = useMemo(() => {
     if (!rngData) return false;
-    // Method 1: Check if shuffled_deck is populated (52 cards = game ended)
-    if (rngData.shuffled_deck.length === 52) return true;
-    // Method 2: Check table state (winners exist = game ended)
+    
+    // ✅ PRIMARY CHECK: Use table state (most reliable indicator)
+    // sorted_users is set when the game ends and winners are determined
     const firstSortedUsers = table?.sorted_users?.[0];
-    if (firstSortedUsers !== undefined && firstSortedUsers.length > 0)
+    if (firstSortedUsers !== undefined && firstSortedUsers.length > 0) {
       return true;
+    }
+    
+    // ✅ SECONDARY CHECK: Deck should be populated after fix
+    // But don't rely solely on this - it's a backup check
+    // Note: shuffled_deck is now stored at creation but hidden during gameplay
+    if (rngData.shuffled_deck.length === 52) {
+      return true;
+    }
+    
     return false;
   }, [rngData, table]);
 

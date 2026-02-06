@@ -8,3 +8,24 @@
     @apply w-full mx-auto px-4;
   }
 }
+
+::-webkit-scrollbar {
+  width: 10px; /* for vertical scrollbar */
+  height: 10px; /* for horizontal scrollbar */
+}
+
+/* Style the track (the background) */
+::-webkit-scrollbar-track {
+  border-radius: 8px;
+}
+
+/* Style the thumb (the draggable handle) */
+::-webkit-scrollbar-thumb {
+  background: #747474;
+  border-radius: 8px;
+}
+
+/* Change the color of the thumb on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: #747474;
+}
